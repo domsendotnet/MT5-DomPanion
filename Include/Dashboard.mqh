@@ -61,7 +61,7 @@ private:
    void              LoadTheme(void);
    int               Px(const int logical) const;
    int               FontPx(const int px) const;
-   uint              PackColor(const color clr, const uchar alpha = 255) const;
+   uint              PackColor(const color clr, const int alpha = 255) const;
    void              Font(const int px, const bool bold);
    int               TextW(const string s);
    int               TextH(void);
@@ -164,9 +164,14 @@ int CDashboard::FontPx(const int px) const
    return -10 * MathMax(9, px);
   }
 
-uint CDashboard::PackColor(const color clr, const uchar alpha) const
+uint CDashboard::PackColor(const color clr, const int alpha) const
   {
-   return ColorToARGB(clr, alpha);
+   int a = alpha;
+   if(a < 0)
+      a = 0;
+   if(a > 255)
+      a = 255;
+   return ColorToARGB(clr, (uchar)a);
   }
 
 void CDashboard::Font(const int px, const bool bold)

@@ -167,7 +167,7 @@ Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
 
 Terminal alert and/or push notification on a guard close.
 
-## Live (v1.11)
+## Live (v1.12)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
