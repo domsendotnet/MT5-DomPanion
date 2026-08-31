@@ -61,7 +61,7 @@ private:
    void              LoadTheme(void);
    int               Px(const int logical) const;
    int               FontPx(const int px) const;
-   uint              ARGB(const color clr, const uchar alpha = 255) const;
+   uint              PackColor(const color clr, const uchar alpha = 255) const;
    void              Font(const int px, const bool bold);
    int               TextW(const string s);
    int               TextH(void);
@@ -164,7 +164,7 @@ int CDashboard::FontPx(const int px) const
    return -10 * MathMax(9, px);
   }
 
-uint CDashboard::ARGB(const color clr, const uchar alpha) const
+uint CDashboard::PackColor(const color clr, const uchar alpha) const
   {
    return ColorToARGB(clr, alpha);
   }
@@ -235,11 +235,11 @@ void CDashboard::Text(const int x, const int y, const string s, const uint clr,
 void CDashboard::Pill(const int x, const int y, const int w, const int h,
                       const string s, const color bg, const color fg)
   {
-   FillRound(x, y, w, h, h / 2, ARGB(bg, 255));
+   FillRound(x, y, w, h, h / 2, PackColor(bg, 255));
    Font(m_fsSm, true);
    int tw = TextW(s);
    int th = TextH();
-   Text(x + (w - tw) / 2, y + (h - th) / 2, s, ARGB(fg));
+   Text(x + (w - tw) / 2, y + (h - th) / 2, s, PackColor(fg));
   }
 
 void CDashboard::HLine(const int x1, const int x2, const int y, const uint clr)
@@ -255,7 +255,7 @@ bool CDashboard::Room(const int need) const
 void CDashboard::SectionTitle(const string s, const int x0)
   {
    Font(m_fsSm, true);
-   Text(x0, m_curY, s, ARGB(m_theme.muted));
+   Text(x0, m_curY, s, PackColor(m_theme.muted));
    m_curY += m_row;
   }
 
@@ -404,7 +404,7 @@ color CDashboard::HeatColor(const SHourStat &hs) const
 void CDashboard::DrawHeader(const SViewModel &vm, const int x0, const int x1)
   {
    Font(m_fsTitle, true);
-   Text(x0, m_curY, "DomPanion", ARGB(m_theme.accent));
+   Text(x0, m_curY, "DomPanion", PackColor(m_theme.accent));
 
    string pill = "ARMED";
    color  pbg  = m_theme.green;
@@ -445,13 +445,13 @@ void CDashboard::DrawAccount(const SViewModel &vm, const int x0, const int x1)
    Font(m_fs, false);
    string mode = DpIsHedging() ? "hedge" : "netting";
    string line = vm.symbol + "  " + mode + "  " + DpMoney(vm.balance, vm.currency);
-   Text(x0, m_curY, line, ARGB(m_theme.text));
+   Text(x0, m_curY, line, PackColor(m_theme.text));
    m_curY += m_row;
 
    Font(m_fsSm, false);
    string eq = "eq " + DoubleToString(vm.equity, 2)
                + "   day " + DoubleToString(vm.guards.dailyPnl, 2);
-   Text(x0, m_curY, eq, ARGB(m_theme.muted));
+   Text(x0, m_curY, eq, PackColor(m_theme.muted));
    m_curY += m_row;
 
    if(StringLen(vm.headline) > 0)
@@ -467,7 +467,7 @@ void CDashboard::DrawAccount(const SViewModel &vm, const int x0, const int x1)
       else if(StringFind(vm.headline, "SAFE") >= 0)
          hc = m_theme.green;
       Font(m_fsSm, true);
-      Text(x0, m_curY, vm.headline, ARGB(hc));
+      Text(x0, m_curY, vm.headline, PackColor(hc));
       m_curY += m_row;
      }
   }
@@ -481,7 +481,7 @@ void CDashboard::DrawPosBar(const SPosView &p, const int x, const int y,
    if(span <= 0.0)
       span = 1.0;
 
-   FillRound(x, y, w, h, h / 2, ARGB(m_theme.bgInner));
+   FillRound(x, y, w, h, h / 2, PackColor(m_theme.bgInner));
 
    int xZero = x + (int)MathRound((0.0 - lo) / span * (double)(w - 1));
    int xSoft = x + (int)MathRound((-p.softSlMoney - lo) / span * (double)(w - 1));
@@ -494,7 +494,7 @@ void CDashboard::DrawPosBar(const SPosView &p, const int x, const int y,
    int xAmberL = x;
    int xAmberR = xSoft;
    if(xAmberR > xAmberL)
-      m_canvas.FillRectangle(xAmberL, y + 1, xAmberR, y + h - 2, ARGB(m_theme.red, 55));
+      m_canvas.FillRectangle(xAmberL, y + 1, xAmberR, y + h - 2, PackColor(m_theme.red, 55));
 
    color mk = m_theme.accent;
    if(p.zone == DP_ZONE_TARGET)
@@ -504,8 +504,8 @@ void CDashboard::DrawPosBar(const SPosView &p, const int x, const int y,
    else if(p.zone == DP_ZONE_LOCKED)
       mk = m_theme.amber;
 
-   m_canvas.Line(xZero, y, xZero, y + h - 1, ARGB(m_theme.muted, 160));
-   m_canvas.FillRectangle(xNow - 1, y, xNow + 1, y + h - 1, ARGB(mk));
+   m_canvas.Line(xZero, y, xZero, y + h - 1, PackColor(m_theme.muted, 160));
+   m_canvas.FillRectangle(xNow - 1, y, xNow + 1, y + h - 1, PackColor(mk));
   }
 
 void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
@@ -517,7 +517,7 @@ void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
    if(vm.posCount <= 0)
      {
       Font(m_fs, false);
-      Text(x0, m_curY, "None — guards watching", ARGB(m_theme.muted));
+      Text(x0, m_curY, "None — guards watching", PackColor(m_theme.muted));
       m_curY += m_row + Px(4);
       return;
      }
@@ -529,24 +529,24 @@ void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
       if(!Room(Px(54)))
          break;
       SPosView p = vm.positions[i];
-      FillRound(x0 - Px(2), m_curY - Px(2), innerW + Px(4), Px(52), Px(6), ARGB(m_theme.bgInner, 180));
+      FillRound(x0 - Px(2), m_curY - Px(2), innerW + Px(4), Px(52), Px(6), PackColor(m_theme.bgInner, 180));
 
       Font(m_fs, true);
       string head = "#" + IntegerToString((long)p.ticket) + "  " + p.side + "  " + DpLots(p.volume);
-      Text(x0, m_curY, head, ARGB(m_theme.text));
+      Text(x0, m_curY, head, PackColor(m_theme.text));
 
       color pc = (p.profitNet >= 0.0 ? m_theme.green : m_theme.red);
       string pnl = DoubleToString(p.profitNet, 2);
       Font(m_fs, true);
       int pw = TextW(pnl);
-      Text(x1 - pw, m_curY, pnl, ARGB(pc));
+      Text(x1 - pw, m_curY, pnl, PackColor(pc));
       m_curY += m_row;
 
       Font(m_fsSm, false);
       string meta = "TP " + DoubleToString(p.tpMoney, 2)
                     + "   soft " + DoubleToString(p.softSlMoney, 2)
                     + "   hard " + DoubleToString(p.hardSlMoney, 2);
-      Text(x0, m_curY, meta, ARGB(m_theme.muted));
+      Text(x0, m_curY, meta, PackColor(m_theme.muted));
 
       color zc = m_theme.muted;
       if(p.zone == DP_ZONE_TARGET) zc = m_theme.green;
@@ -555,7 +555,7 @@ void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
       string zs = p.zoneName;
       int zw = TextW(zs);
       Font(m_fsSm, true);
-      Text(x1 - zw, m_curY, zs, ARGB(zc));
+      Text(x1 - zw, m_curY, zs, PackColor(zc));
       m_curY += m_row - Px(2);
 
       DrawPosBar(p, x0, m_curY, innerW, Px(8));
@@ -661,9 +661,9 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
       if(!Room(m_row))
          break;
       Font(m_fsSm, true);
-      Text(colOn, m_curY, keys[i], ARGB(m_theme.muted));
+      Text(colOn, m_curY, keys[i], PackColor(m_theme.muted));
       Font(m_fsSm, false);
-      Text(colVal, m_curY, vals[i], ARGB(cols[i]));
+      Text(colVal, m_curY, vals[i], PackColor(cols[i]));
       m_curY += m_row - Px(1);
      }
    m_curY += Px(6);
@@ -694,12 +694,12 @@ void CDashboard::DrawClock(const SViewModel &vm, const int x0, const int x1)
         {
          SHourStat hs = vm.time.hour[hour];
          color cell = HeatColor(hs);
-         FillRound(x, m_curY, cw, ch, Px(3), ARGB(cell, (hs.trades > 0 ? 200 : 120)));
+         FillRound(x, m_curY, cw, ch, Px(3), PackColor(cell, (hs.trades > 0 ? 200 : 120)));
 
          if(hour == vm.time.currentHour)
-            StrokeRound(x, m_curY, cw, ch, Px(3), ARGB(m_theme.amber, 255));
+            StrokeRound(x, m_curY, cw, ch, Px(3), PackColor(m_theme.amber, 255));
          else if(hs.losing)
-            StrokeRound(x, m_curY, cw, ch, Px(3), ARGB(m_theme.red, 180));
+            StrokeRound(x, m_curY, cw, ch, Px(3), PackColor(m_theme.red, 180));
 
          Font(m_fsSm, true);
          string lab = DpHourLabel(hour);
@@ -708,7 +708,7 @@ void CDashboard::DrawClock(const SViewModel &vm, const int x0, const int x1)
          if(m_cfg.theme == DP_THEME_LIGHT && !hs.losing && hs.winRate < 60.0)
             fg = m_theme.text;
          int tw = TextW(lab);
-         Text(x + (cw - tw) / 2, m_curY + Px(4), lab, ARGB(fg));
+         Text(x + (cw - tw) / 2, m_curY + Px(4), lab, PackColor(fg));
 
          x += cw + gap;
          hour++;
@@ -719,17 +719,17 @@ void CDashboard::DrawClock(const SViewModel &vm, const int x0, const int x1)
    Font(m_fsSm, false);
    if(Room(m_row))
      {
-      Text(x0, m_curY, "Best   " + vm.time.bestText, ARGB(m_theme.green));
+      Text(x0, m_curY, "Best   " + vm.time.bestText, PackColor(m_theme.green));
       m_curY += m_row - Px(1);
      }
    if(Room(m_row))
      {
-      Text(x0, m_curY, "Worst  " + vm.time.worstText, ARGB(m_theme.red));
+      Text(x0, m_curY, "Worst  " + vm.time.worstText, PackColor(m_theme.red));
       m_curY += m_row - Px(1);
      }
    if(Room(m_row))
      {
-      Text(x0, m_curY, "Losing " + vm.time.losingList, ARGB(m_theme.muted));
+      Text(x0, m_curY, "Losing " + vm.time.losingList, PackColor(m_theme.muted));
       m_curY += m_row;
      }
    m_curY += Px(4);
@@ -750,7 +750,7 @@ void CDashboard::DrawActions(const SViewModel &vm, const int x0, const int x1)
          break;
       SAction a = vm.actions[i];
       string ts = TimeToString(a.t, TIME_MINUTES);
-      Text(x0, m_curY, ts + "  " + a.text, ARGB(m_theme.muted));
+      Text(x0, m_curY, ts + "  " + a.text, PackColor(m_theme.muted));
       m_curY += m_row - Px(1);
      }
   }
@@ -823,25 +823,25 @@ void CDashboard::Render(const SViewModel &vm)
    if(!EnsureCanvas(w, h, x, y))
       return;
 
-   m_canvas.Erase(ARGB(m_theme.bg, m_theme.bgAlpha));
-   FillRound(0, 0, m_w, m_h, m_radius, ARGB(m_theme.bg, m_theme.bgAlpha));
-   StrokeRound(0, 0, m_w, m_h, m_radius, ARGB(m_theme.border, 255));
+   m_canvas.Erase(PackColor(m_theme.bg, m_theme.bgAlpha));
+   FillRound(0, 0, m_w, m_h, m_radius, PackColor(m_theme.bg, m_theme.bgAlpha));
+   StrokeRound(0, 0, m_w, m_h, m_radius, PackColor(m_theme.border, 255));
 
    int x0 = m_pad;
    int x1 = m_w - m_pad;
    m_curY = m_pad;
 
    DrawHeader(vm, x0, x1);
-   HLine(x0, x1, m_curY, ARGB(m_theme.border, 180));
+   HLine(x0, x1, m_curY, PackColor(m_theme.border, 180));
    m_curY += Px(8);
    DrawAccount(vm, x0, x1);
-   HLine(x0, x1, m_curY, ARGB(m_theme.border, 140));
+   HLine(x0, x1, m_curY, PackColor(m_theme.border, 140));
    m_curY += Px(8);
    DrawPositions(vm, x0, x1);
-   HLine(x0, x1, m_curY, ARGB(m_theme.border, 140));
+   HLine(x0, x1, m_curY, PackColor(m_theme.border, 140));
    m_curY += Px(8);
    DrawGuards(vm, x0, x1);
-   HLine(x0, x1, m_curY, ARGB(m_theme.border, 140));
+   HLine(x0, x1, m_curY, PackColor(m_theme.border, 140));
    m_curY += Px(8);
    DrawClock(vm, x0, x1);
    DrawActions(vm, x0, x1);
@@ -849,7 +849,7 @@ void CDashboard::Render(const SViewModel &vm)
    if(StringLen(vm.lastError) > 0 && Room(m_row))
      {
       Font(m_fsSm, false);
-      Text(x0, m_h - m_pad - m_row, vm.lastError, ARGB(m_theme.red));
+      Text(x0, m_h - m_pad - m_row, vm.lastError, PackColor(m_theme.red));
      }
 
    m_canvas.Update(true);
