@@ -96,7 +96,6 @@ public:
                     ~CDashboard(void);
    bool              Init(const SDpConfig &cfg);
    void              Deinit(void);
-   void              Configure(const SDpConfig &cfg);
    void              Render(const SViewModel &vm);
   };
 
@@ -369,12 +368,6 @@ bool CDashboard::Init(const SDpConfig &cfg)
    return true;
   }
 
-void CDashboard::Configure(const SDpConfig &cfg)
-  {
-   m_cfg = cfg;
-   LoadTheme();
-  }
-
 void CDashboard::Deinit(void)
   {
    if(m_ready)
@@ -464,12 +457,15 @@ void CDashboard::DrawAccount(const SViewModel &vm, const int x0, const int x1)
    if(StringLen(vm.headline) > 0)
      {
       color hc = m_theme.muted;
-      if(StringFind(vm.headline, "KILL") >= 0 || StringFind(vm.headline, "blocked") >= 0)
+      if(StringFind(vm.headline, "START FLOOR") >= 0 ||
+         StringFind(vm.headline, "blocked") >= 0 ||
+         StringFind(vm.headline, "flattening") >= 0 ||
+         StringFind(vm.headline, "LOSING HOUR") >= 0)
          hc = m_theme.red;
-      else if(StringFind(vm.headline, "SAFE") >= 0 || StringFind(vm.headline, "TARGET") >= 0)
-         hc = m_theme.green;
-      else if(StringFind(vm.headline, "AMBER") >= 0)
+      else if(StringFind(vm.headline, "Floor waiting") >= 0)
          hc = m_theme.amber;
+      else if(StringFind(vm.headline, "SAFE") >= 0)
+         hc = m_theme.green;
       Font(m_fsSm, true);
       Text(x0, m_curY, vm.headline, ARGB(hc));
       m_curY += m_row;

@@ -34,11 +34,6 @@ string DpHourLabel(const int hour)
    return (hour < 10 ? "0" : "") + IntegerToString(hour);
   }
 
-bool DpNear(const double a, const double b, const double eps)
-  {
-   return MathAbs(a - b) <= eps;
-  }
-
 int DpClampInt(const int v, const int lo, const int hi)
   {
    if(v < lo)
@@ -135,6 +130,9 @@ bool DpParseHourSpec(const string spec, bool &hours[], string &err)
    if(StringLen(s) == 0)
       return true;
 
+   StringReplace(s, " - ", "-");
+   StringReplace(s, "- ", "-");
+   StringReplace(s, " -", "-");
    StringReplace(s, " ", ",");
    StringReplace(s, ";", ",");
    StringReplace(s, "|", ",");
@@ -287,6 +285,20 @@ void DpReleaseOwnership(const long chartId, const bool needAllSymbols)
       GlobalVariableDel(gv);
   }
 
+bool DpManageSymbol(const string symbol, const SDpConfig &cfg)
+  {
+   if(cfg.manageScope == DP_SCOPE_ACCOUNT)
+      return true;
+   return (symbol == cfg.symbol);
+  }
+
+bool DpManageMagic(const long magic, const SDpConfig &cfg)
+  {
+   if(cfg.magicFilter < 0)
+      return true;
+   return (magic == cfg.magicFilter);
+  }
+
 //+------------------------------------------------------------------+
 bool DpIsHedging(void)
   {
@@ -351,6 +363,17 @@ double DpUnits001(const double volume, const double lotUnit)
    return volume / u;
   }
 
+void DpMoneyBand(const double volume, const SDpConfig &cfg,
+                 double &tpMoney, double &softMoney, double &hardMoney)
+  {
+   double units = DpUnits001(volume, cfg.lotUnit);
+   tpMoney   = units * cfg.tpPer001;
+   softMoney = units * cfg.slPer001;
+   hardMoney = softMoney * cfg.breathMultiplier;
+   if(hardMoney < softMoney)
+      hardMoney = softMoney;
+  }
+
 // Equity level that trips the daily start-balance floor.
 // 600 start + 3% buffer → 618. Close when equity is at or below this.
 double DpDailyFloorTrigger(const double startBalance, const double bufferPct)
@@ -361,6 +384,12 @@ double DpDailyFloorTrigger(const double startBalance, const double bufferPct)
    if(pct < 0.0)
       pct = 0.0;
    return startBalance * (1.0 + pct / 100.0);
+  }
+
+string DpFloorDetail(const double floorLevel)
+  {
+   return "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+          + " <= floor " + DoubleToString(floorLevel, 2);
   }
 
 //+------------------------------------------------------------------+
@@ -422,8 +451,7 @@ double DpPositionNetProfit(const ulong ticket, double &commission, double &reali
   }
 
 // Realized P/L of closed deals whose close time is in [from, to].
-double DpClosedPnl(const datetime from, const datetime to,
-                   const SDpConfig &cfg, const bool filterSymbol)
+double DpClosedPnl(const datetime from, const datetime to, const SDpConfig &cfg)
   {
    if(!HistorySelect(from, to))
       return 0.0;
@@ -441,11 +469,9 @@ double DpClosedPnl(const datetime from, const datetime to,
       ENUM_DEAL_TYPE dtype = (ENUM_DEAL_TYPE)HistoryDealGetInteger(deal, DEAL_TYPE);
       if(dtype != DEAL_TYPE_BUY && dtype != DEAL_TYPE_SELL)
          continue;
-      string sym = HistoryDealGetString(deal, DEAL_SYMBOL);
-      if(filterSymbol && cfg.manageScope == DP_SCOPE_CHART_SYMBOL && sym != cfg.symbol)
+      if(!DpManageSymbol(HistoryDealGetString(deal, DEAL_SYMBOL), cfg))
          continue;
-      long magic = HistoryDealGetInteger(deal, DEAL_MAGIC);
-      if(cfg.magicFilter >= 0 && magic != cfg.magicFilter)
+      if(!DpManageMagic(HistoryDealGetInteger(deal, DEAL_MAGIC), cfg))
          continue;
       pnl += HistoryDealGetDouble(deal, DEAL_PROFIT)
              + HistoryDealGetDouble(deal, DEAL_SWAP)
@@ -560,20 +586,6 @@ bool DpWantUi(const bool showDashboard)
    return true;
   }
 
-bool DpManageSymbol(const string symbol, const SDpConfig &cfg)
-  {
-   if(cfg.manageScope == DP_SCOPE_ACCOUNT)
-      return true;
-   return (symbol == cfg.symbol);
-  }
-
-bool DpManageMagic(const long magic, const SDpConfig &cfg)
-  {
-   if(cfg.magicFilter < 0)
-      return true;
-   return (magic == cfg.magicFilter);
-  }
-
 bool DpRetryable(const uint retcode)
   {
    switch(retcode)
@@ -590,6 +602,7 @@ bool DpRetryable(const uint retcode)
       case TRADE_RETCODE_MARKET_CLOSED:
       case TRADE_RETCODE_LIMIT_VOLUME:
       case TRADE_RETCODE_INVALID_FILL:
+      case TRADE_RETCODE_INVALID_CLOSE_VOLUME:
       case TRADE_RETCODE_CLOSE_ORDER_EXIST:
       case TRADE_RETCODE_TRADE_DISABLED:
       case TRADE_RETCODE_CLIENT_DISABLES_AT:

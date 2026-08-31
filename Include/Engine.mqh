@@ -63,6 +63,7 @@ private:
    bool              NoteOnce(const ulong ticket);
    bool              IsDead(const ulong ticket) const;
    void              MarkDead(const ulong ticket);
+   void              PruneGoneTickets(ulong &arr[], int &n);
    void              PruneDead(void);
    int               FindState(const ulong ticket) const;
    int               EnsureState(const SPosSnap &snap);
@@ -158,23 +159,29 @@ void CDomEngine::MarkDead(const ulong ticket)
       m_dead[m_deadN++] = ticket;
   }
 
-void CDomEngine::PruneDead(void)
+void CDomEngine::PruneGoneTickets(ulong &arr[], int &n)
   {
    int w = 0;
-   for(int i = 0; i < m_deadN; i++)
+   for(int i = 0; i < n; i++)
      {
       bool live = false;
       for(int p = 0; p < m_posN && !live; p++)
-         if(m_pos[p].ticket == m_dead[i])
+         if(m_pos[p].ticket == arr[i])
             live = true;
       for(int p = 0; p < m_pendN && !live; p++)
-         if(m_pend[p].ticket == m_dead[i])
+         if(m_pend[p].ticket == arr[i])
             live = true;
       if(!live)
          continue;
-      m_dead[w++] = m_dead[i];
+      arr[w++] = arr[i];
      }
-   m_deadN = w;
+   n = w;
+  }
+
+void CDomEngine::PruneDead(void)
+  {
+   PruneGoneTickets(m_dead, m_deadN);
+   PruneGoneTickets(m_noted, m_notedN);
   }
 
 int CDomEngine::ReasonRank(const ENUM_DP_REASON r) const
@@ -451,12 +458,13 @@ void CDomEngine::RefreshDaily(void)
       m_dailyLockSince   = 0;
      }
 
-   bool filterSym = (m_cfg.manageScope == DP_SCOPE_CHART_SYMBOL);
-   m_dailyClosed = DpClosedPnl(day, TimeCurrent(), m_cfg, filterSym);
+   m_dailyClosed = DpClosedPnl(day, TimeCurrent(), m_cfg);
 
+   // Today's deals already include realized partials and commissions.
+   // Add only open floating (price + swap) so those are not counted twice.
    double floating = 0.0;
    for(int i = 0; i < m_posN; i++)
-      floating += m_pos[i].profitNet;
+      floating += m_pos[i].profitRaw + m_pos[i].swap;
    m_dailyPnl = m_dailyClosed + floating;
 
    if(m_cfg.enableDailyLock && m_cfg.dailyLockMoney > 0.0 &&
@@ -544,8 +552,7 @@ void CDomEngine::EvaluatePendings(void)
       if(m_dailyFloorSticky)
         {
          reason = DP_REASON_DAILY_FLOOR;
-         detail = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
-                  + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
+         detail = DpFloorDetail(m_dailyFloorLevel);
         }
       else if(Grandfathered(m_pend[i].timeSetup))
          continue;
@@ -614,12 +621,8 @@ void CDomEngine::EvaluatePositions(void)
          continue;
 
       bool gf = Grandfathered(snap.timeOpen);
-      double units = DpUnits001(snap.volume, m_cfg.lotUnit);
-      double tpMoney   = units * m_cfg.tpPer001;
-      double softMoney = units * m_cfg.slPer001;
-      double hardMoney = softMoney * m_cfg.breathMultiplier;
-      if(hardMoney < softMoney)
-         hardMoney = softMoney;
+      double tpMoney = 0.0, softMoney = 0.0, hardMoney = 0.0;
+      DpMoneyBand(snap.volume, m_cfg, tpMoney, softMoney, hardMoney);
 
       double lockFloor = 0.0;
       if(m_cfg.enableProfitLock)
@@ -636,8 +639,7 @@ void CDomEngine::EvaluatePositions(void)
       if(m_dailyFloorSticky)
         {
          reason = DP_REASON_DAILY_FLOOR;
-         detail = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
-                  + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
+         detail = DpFloorDetail(m_dailyFloorLevel);
         }
       else if(!gf && m_dailyLossSticky)
         {
@@ -751,12 +753,8 @@ void CDomEngine::ApplyMoneyAndStops(const int idx, const bool willClose)
    if(si < 0)
       return;
 
-   double units = DpUnits001(snap.volume, m_cfg.lotUnit);
-   double tpMoney   = units * m_cfg.tpPer001;
-   double softMoney = units * m_cfg.slPer001;
-   double hardMoney = softMoney * m_cfg.breathMultiplier;
-   if(hardMoney < softMoney)
-      hardMoney = softMoney;
+   double tpMoney = 0.0, softMoney = 0.0, hardMoney = 0.0;
+   DpMoneyBand(snap.volume, m_cfg, tpMoney, softMoney, hardMoney);
 
    double slPrice = 0.0;
    double tpPrice = 0.0;
@@ -865,6 +863,7 @@ void CDomEngine::AlertClose(const string text)
 
 void CDomEngine::ProcessQueue(void)
   {
+   bool rebuildHist = false;
    datetime now = TimeCurrent();
    for(int i = m_qN - 1; i >= 0; i--)
      {
@@ -913,7 +912,7 @@ void CDomEngine::ProcessQueue(void)
          DequeueAt(i);
          m_lastError = "";
          if(!m_cfg.dryRun)
-            m_time.Rebuild(true);
+            rebuildHist = true;
          continue;
         }
 
@@ -923,6 +922,12 @@ void CDomEngine::ProcessQueue(void)
       m_lastError = err;
       DpLog(0, m_cfg.logLevel, err);
 
+      if(rc == TRADE_RETCODE_INVALID_CLOSE_VOLUME && m_q[i].volume > DP_VOLUME_EPS)
+        {
+         m_q[i].volume = 0.0;
+         continue;
+        }
+
       if(!DpRetryable(rc))
         {
          PushAction(m_q[i].reason, "GIVE UP " + err);
@@ -931,10 +936,12 @@ void CDomEngine::ProcessQueue(void)
         }
       else if(m_q[i].attempts >= DP_MAX_CLOSE_ATTEMPTS)
         {
-         // Keep retrying (market closed, no algo, no connection). Do not mark dead.
          m_q[i].attempts = DP_MAX_CLOSE_ATTEMPTS - 1;
         }
      }
+
+   if(rebuildHist)
+      m_time.Rebuild(true);
   }
 
 void CDomEngine::BuildView(void)
@@ -995,10 +1002,7 @@ void CDomEngine::BuildView(void)
       v.side       = (snap.type == POSITION_TYPE_BUY ? "BUY" : "SELL");
       v.volume     = snap.volume;
       v.profitNet  = snap.profitNet;
-      double units = DpUnits001(snap.volume, m_cfg.lotUnit);
-      v.tpMoney      = units * m_cfg.tpPer001;
-      v.softSlMoney  = units * m_cfg.slPer001;
-      v.hardSlMoney  = v.softSlMoney * m_cfg.breathMultiplier;
+      DpMoneyBand(snap.volume, m_cfg, v.tpMoney, v.softSlMoney, v.hardSlMoney);
       v.peakProfit   = (si >= 0 ? m_st[si].peakProfit : snap.profitNet);
       v.troughProfit = (si >= 0 ? m_st[si].troughProfit : snap.profitNet);
       v.profitLocked = (si >= 0 && m_st[si].profitLocked);
@@ -1078,11 +1082,7 @@ void CDomEngine::Work(void)
      {
       RefreshDaily();
       if(m_dailyFloorSticky)
-        {
-         string det = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
-                      + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
-         EnqueueAccountFlatten(DP_REASON_DAILY_FLOOR, det);
-        }
+         EnqueueAccountFlatten(DP_REASON_DAILY_FLOOR, DpFloorDetail(m_dailyFloorLevel));
       EvaluatePendings();
       EvaluatePositions();
       PruneState();

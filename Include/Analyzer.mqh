@@ -113,7 +113,17 @@ bool CTimeAnalyzer::Rebuild(const bool force)
   {
    if(!m_cfg.enableTimeAnalysis)
      {
-      ZeroMemory(m_report);
+      if(m_report.closedTrades != 0 || m_lastBuild != 0)
+        {
+         for(int h = 0; h < DP_HOUR_COUNT; h++)
+            ResetHour(m_report.hour[h]);
+         m_report.closedTrades = 0;
+         m_report.wins = 0;
+         m_report.losses = 0;
+         m_report.net = 0.0;
+         m_report.winRate = 0.0;
+         m_lastBuild = 0;
+        }
       m_report.currentHour = DpHourOf(TimeCurrent(), m_cfg);
       Classify();
       Summarize();
@@ -163,6 +173,8 @@ bool CTimeAnalyzer::Rebuild(const bool force)
    SHistPos acc[];
    int nAcc = 0;
    int deals = HistoryDealsTotal();
+   int lastIdx = -1;
+   ulong lastPid = 0;
 
    for(int i = 0; i < deals; i++)
      {
@@ -186,7 +198,7 @@ bool CTimeAnalyzer::Rebuild(const bool force)
       if(pid == 0)
          continue;
 
-      int idx = FindAcc(acc, nAcc, pid);
+      int idx = (lastPid == pid && lastIdx >= 0) ? lastIdx : FindAcc(acc, nAcc, pid);
       if(idx < 0)
         {
          idx = nAcc;
@@ -202,6 +214,8 @@ bool CTimeAnalyzer::Rebuild(const bool force)
          acc[idx].pnl    = 0.0;
          acc[idx].hasIn  = false;
         }
+      lastPid = pid;
+      lastIdx = idx;
 
       ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(ticket, DEAL_ENTRY);
       datetime t = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
