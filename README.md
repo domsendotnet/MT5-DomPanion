@@ -157,14 +157,15 @@ Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
 
 Terminal alert and/or push notification on a guard close.
 
-## First session
+## Live (v1.10)
 
-1. Compile, attach, Algo Trading **on**.
-2. Leave **Close trades in losing hours** off. Read the CLOCK.
-3. Optionally tick **Dry run** for one session.
-4. Defaults already cap lots, enforce the money band, and block scale-in.
-5. Turn on daily lock only if you want to freeze a winning day.
-6. Turn on **Daily Start Floor**, set the seed to what you actually started with (600, 6000, …). It stays idle until you are 5% up, then protects the 3% cushion above the seed.
+This is the live-trading cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**.
+
+1. Leave **Close trades in losing hours** off until the CLOCK looks right.
+2. Optional: **Dry run** for one session before it can close anything.
+3. Defaults already cap lots, enforce the money band, and block scale-in.
+4. Daily goal lock: only if you want to freeze a winning day.
+5. **Daily Start Floor**: set the seed to what you actually started with (600, 6000, …). It stays idle until you are 5% up, then protects the 3% cushion above the seed. If you attach with the seed still at 600 on a larger account, update it first.
 
 ## License
 
