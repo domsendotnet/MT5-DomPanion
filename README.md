@@ -67,107 +67,29 @@ Losing hours are classified from **entry time**, not the current clock. Block is
 
 ## Settings
 
-Grouped in the EA Inputs. Each line is a switch or a number — nothing is buried in code.
+In MT5: right-click the chart → Expert Advisors → Properties → **Inputs**. Each line’s label is the full meaning. Everyday switches are at the top; **Advanced** is at the bottom — leave it unless you need it.
 
-### 0. General
+**On / off** — Practice mode (shows what would close, does not close). Panel. Pop-up / phone alert.
 
-| Input | Meaning |
-|---|---|
-| Dry run | Log and paint what would close, without sending orders |
-| Manage scope | This chart’s symbol, or every symbol on the account |
-| Magic filter | `-1` all, `0` manual only, or a specific magic |
-| Enforce on start | Apply rules to positions already open when you attach |
-| Close slippage | Points allowed on a market close |
-| Log | `0` errors, `1` actions, `2` verbose |
+**Panel** — Corner and dark/light.
 
-If two instances use “entire account”, the second stands by.
+**1. Clock** — Builds the hour heatmap from past trades. “Close trades I open in a losing hour” stays **off** until you trust it. Optional: type hours like `0-6,16` or never-block `9-11`.
 
-### Dashboard
+**2. Lot size** — e.g. 2000 needed per 0.01. With 2300 on the account, 0.02 is closed.
 
-Corner (top-left / top-right / bottom-left / bottom-right), theme, offsets, width, font, extra scale, and extra gaps so the panel does not cover the price scale or status bar. Size follows DPI and window height.
+**3. Take profit and hard stop** — Money per 0.01 lot. Default: take 2, 1R is 2, hard close at 3× (so 0.01 dies at −6, 0.10 at −60). Optional broker SL/TP if the terminal dies.
 
-### 1. Time Intelligence
+**4. One trade only** — A 2nd/3rd position is closed. Stops scaling into losers.
 
-| Input | Meaning |
-|---|---|
-| Analyse closed trades | Build the CLOCK from history |
-| History window | Days of closed trades (entry hour) |
-| Min trades per hour | Sample size before auto-classification |
-| Losing win rate | Hour is auto-losing below this % |
-| Also losing if net < 0 | Extra auto-losing rule |
-| Close trades in losing hours | **Off by default.** Turn on after you trust the CLOCK |
-| Hour clock | Server / local / UTC / UTC+offset |
-| Force-losing hours | e.g. `0-6,16,22-23` |
-| Never-block hours | e.g. `9-11` (wins over auto and force-losing) |
+**5. Daily goal** — Optional. After today is up X, block new trades. Optional flatten. Optional max loss.
 
-### 2. Lot Size Guard
+**6. Protect starting balance** — Optional. Set today’s seed (600, 6000, …). Stays **off** until equity has reached seed + 5% (630 on 600). After that, flatten if equity falls to seed + 3% (618). Arm % must be greater than the kill %. Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
 
-| Input | Meaning |
-|---|---|
-| Enable | On/off |
-| Balance needed per 0.01 | `floor(balance / this) × 0.01` is the max |
-| Lot unit | Keep `0.01` unless the symbol steps differ |
-| Cap against | Balance or equity |
+**Advanced** — Whole-account vs this chart, magic filter, slippage, panel size, clock sample size, profit lock, amber timeout. Defaults are fine.
 
-### 3. Money TP / SL / Breath
+If two copies use “whole account”, the second stands by.
 
-| Input | Meaning |
-|---|---|
-| Enable | On/off |
-| Take profit per 0.01 | Money target |
-| 1R stop per 0.01 | Soft (warning) distance |
-| Breath multiplier | Hard kill = this × 1R (default 3) |
-| Amber timeout | Seconds stuck in 1R–NR before close (`0` = off) |
-| Broker hard SL / money TP | Offline safety net |
-| Profit lock | After peak hits a % of TP, raise the kill floor (default off) |
-| Lock floor in R | `0` = breakeven |
-
-### 4. Scale-in Block
-
-| Input | Meaning |
-|---|---|
-| Kill 2nd/3rd | Keep the oldest position |
-| Scope | This symbol or the whole account |
-
-### 5. Daily Goal Lock
-
-| Input | Meaning |
-|---|---|
-| Enable | Off by default |
-| Daily target | Block new trades once today ≥ this (`0` = off) |
-| Flatten | Also close the open trade when the goal hits |
-| Daily max loss | Flatten and block if today ≤ −this (`0` = off) |
-
-Resets at broker midnight.
-
-### 6. Daily Start Floor
-
-Protects the day’s seed so a drawdown cannot chew through it — but **not from bar one**.
-
-Example: start **600**, arm **5%**, buffer **3%**.
-
-1. Until peak equity has reached `600 × 1.05 = 630`, the floor is **inactive**. You can open trades from 600 without being flattened.
-2. Once equity has printed 630 (sticky for the day), the floor **arms**.
-3. After that, if equity falls to `600 × 1.03 = 618` or below, everything is flattened and new trades are closed for the rest of the broker day.
-
-Arm % must be greater than Buffer % (otherwise it would lock the instant it arms).
-
-| Input | Meaning |
-|---|---|
-| Enable | Off by default |
-| Starting balance | Seed for the day (e.g. 600). You set this; it does not auto-snapshot account balance |
-| Buffer % | Once armed, flatten when equity ≤ start × (1 + this/100) |
-| Arm % | Inactive until peak equity ≥ start × (1 + this/100). Default 5 |
-
-Uses **account equity** (floating counts). Arming is sticky on **peak equity** for that broker day, so a drawdown after 630 is still protected. Flatten ignores “enforce on start” grandfathering and closes every position/pending that matches the magic filter, on every symbol. After the trip, new trades stay blocked until midnight even if equity recovers.
-
-Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
-
-### Alerts
-
-Terminal alert and/or push notification on a guard close.
-
-## Live (v1.12)
+## Live (v1.13)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 

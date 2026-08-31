@@ -21,36 +21,36 @@
 
 enum ENUM_DP_CORNER
   {
-   DP_CORNER_LEFT_TOP    = 0,  // Top-left
-   DP_CORNER_RIGHT_TOP   = 1,  // Top-right
-   DP_CORNER_LEFT_BOTTOM = 2,  // Bottom-left
-   DP_CORNER_RIGHT_BOTTOM= 3   // Bottom-right
+   DP_CORNER_LEFT_TOP    = 0,  // Top left
+   DP_CORNER_RIGHT_TOP   = 1,  // Top right
+   DP_CORNER_LEFT_BOTTOM = 2,  // Bottom left
+   DP_CORNER_RIGHT_BOTTOM= 3   // Bottom right
   };
 
 enum ENUM_DP_SCOPE
   {
-   DP_SCOPE_CHART_SYMBOL = 0,  // Only the chart symbol
-   DP_SCOPE_ACCOUNT      = 1   // Every symbol on the account
+   DP_SCOPE_CHART_SYMBOL = 0,  // This chart only
+   DP_SCOPE_ACCOUNT      = 1   // Whole account
   };
 
 enum ENUM_DP_TIMEBASE
   {
-   DP_TIME_SERVER = 0,         // Broker server time (deal timestamps)
-   DP_TIME_LOCAL  = 1,         // Terminal local time
+   DP_TIME_SERVER = 0,         // Broker time
+   DP_TIME_LOCAL  = 1,         // Your PC time
    DP_TIME_UTC    = 2,         // UTC
-   DP_TIME_OFFSET = 3          // UTC plus InpUtcOffsetHours
+   DP_TIME_OFFSET = 3          // UTC + offset hours
   };
 
 enum ENUM_DP_LOT_REF
   {
-   DP_LOT_BALANCE = 0,
-   DP_LOT_EQUITY  = 1
+   DP_LOT_BALANCE = 0,         // Balance
+   DP_LOT_EQUITY  = 1          // Equity
   };
 
 enum ENUM_DP_THEME
   {
-   DP_THEME_DARK  = 0,
-   DP_THEME_LIGHT = 1
+   DP_THEME_DARK  = 0,         // Dark
+   DP_THEME_LIGHT = 1          // Light
   };
 
 enum ENUM_DP_ZONE
