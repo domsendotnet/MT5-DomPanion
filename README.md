@@ -6,6 +6,16 @@ Companion Expert Advisor for MetaTrader 5. It does **not** open trades. It watch
 
 Built for high-leverage, low-balance discretionary trading: the pattern of making a few hundred / a few thousand and then giving it back by scaling into losers and oversizing.
 
+## Disclaimer — read this first
+
+**Trading is risky.** You can lose some or all of your capital, including on high-leverage accounts. This software is a companion tool, not financial advice, not a trading system, and not a guarantee of anything.
+
+**Use it entirely at your own risk.** The author (Dominik Fischer) and contributors take **no responsibility and no liability** for any loss, damage, missed trade, failed close, software bug, broker behaviour, or other outcome from using, misconfiguring, or relying on DomPanion — including after you have tested it.
+
+**Test extensively on demo accounts** before even considering a live account. Demo results do not prove the tool is safe or correct on live. Even after thorough demo testing, **you still use it at your own risk; we still accept no responsibility or liability.**
+
+If you cannot afford to lose the money, do not trade, and do not use this tool.
+
 ## Install
 
 Copy this folder to:
@@ -159,7 +169,7 @@ Terminal alert and/or push notification on a guard close.
 
 ## Live (v1.10)
 
-This is the live-trading cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**.
+This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
 1. Leave **Close trades in losing hours** off until the CLOCK looks right.
 2. Optional: **Dry run** for one session before it can close anything.
@@ -170,3 +180,5 @@ This is the live-trading cut. Copy the folder to `MQL5/Experts/DomPanion/`, comp
 ## License
 
 MIT. Copyright © 2026 Dominik Fischer.
+
+The MIT licence’s “as is” / no-warranty terms apply. In addition: trading is risky; this tool is used at your own risk; the author accepts no responsibility or liability for its use, including after demo testing.
