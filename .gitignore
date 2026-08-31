@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+*.ex5
+*.ex4
+*.log
+*.tlog
+*.pdb
+*.pch
+*.obj
+*.bak
+.idea/
+.vscode/
+*.set
+!*.set.example
