@@ -144,6 +144,7 @@ struct SDpConfig
    bool              enableDailyFloor;
    double            dailyStartBalance;
    double            dailyFloorBufferPct;
+   double            dailyFloorArmPct;
 
    bool              alertOnClose;
    bool              notifyOnClose;
@@ -295,6 +296,8 @@ struct SGuardView
    bool              dailyFloorOn;
    double            dailyStartBalance;
    double            dailyFloorLevel;
+   double            dailyFloorArmLevel;
+   bool              dailyFloorArmed;
    bool              dailyFloorHit;
    bool              dryRun;
    bool              armed;

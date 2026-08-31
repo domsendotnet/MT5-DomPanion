@@ -132,19 +132,26 @@ Resets at broker midnight.
 
 ### 6. Daily Start Floor
 
-Protects the day’s seed so a drawdown cannot chew through it.
+Protects the day’s seed so a drawdown cannot chew through it — but **not from bar one**.
 
-Example: start **600**, buffer **3%**. Trigger equity = `600 × 1.03 = 618`. Balance 740 with equity 620 is ~3% above 600 — close enough that the next tick of drawdown flattens everything.
+Example: start **600**, arm **5%**, buffer **3%**.
+
+1. Until peak equity has reached `600 × 1.05 = 630`, the floor is **inactive**. You can open trades from 600 without being flattened.
+2. Once equity has printed 630 (sticky for the day), the floor **arms**.
+3. After that, if equity falls to `600 × 1.03 = 618` or below, everything is flattened and new trades are closed for the rest of the broker day.
+
+Arm % must be greater than Buffer % (otherwise it would lock the instant it arms).
 
 | Input | Meaning |
 |---|---|
 | Enable | Off by default |
 | Starting balance | Seed for the day (e.g. 600). You set this; it does not auto-snapshot account balance |
-| Buffer % | Flatten when equity ≤ start × (1 + this/100). `0` = at the seed exactly |
+| Buffer % | Once armed, flatten when equity ≤ start × (1 + this/100) |
+| Arm % | Inactive until peak equity ≥ start × (1 + this/100). Default 5 |
 
-Uses **account equity** (floating drawdown counts), not balance. Flatten ignores “enforce on start” grandfathering and closes every position/pending that matches the magic filter, on every symbol. After the trip, new trades are closed until broker midnight even if equity recovers. If you deposit, you still wait until the next day (or turn the feature off).
+Uses **account equity** (floating counts). Arming is sticky on **peak equity** for that broker day, so a drawdown after 630 is still protected. Flatten ignores “enforce on start” grandfathering and closes every position/pending that matches the magic filter, on every symbol. After the trip, new trades stay blocked until midnight even if equity recovers.
 
-If equity is already at or below the trigger when you attach, it fires immediately.
+Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
 
 ### Alerts
 
@@ -157,7 +164,7 @@ Terminal alert and/or push notification on a guard close.
 3. Optionally tick **Dry run** for one session.
 4. Defaults already cap lots, enforce the money band, and block scale-in.
 5. Turn on daily lock only if you want to freeze a winning day.
-6. Turn on **Daily Start Floor**, set the seed to what you actually started the day with (600, 6000, …), keep 3% unless you want a tighter or looser cushion.
+6. Turn on **Daily Start Floor**, set the seed to what you actually started with (600, 6000, …). It stays idle until you are 5% up, then protects the 3% cushion above the seed.
 
 ## License
 

@@ -44,7 +44,10 @@ private:
    bool              m_dailyHitSticky;
    bool              m_dailyLossSticky;
    bool              m_dailyFloorSticky;
+   bool              m_dailyFloorArmed;
    double            m_dailyFloorLevel;
+   double            m_dailyFloorArmLevel;
+   double            m_dailyPeakEquity;
    double            m_dailyClosed;
    double            m_dailyPnl;
    string            m_lastError;
@@ -114,7 +117,10 @@ void CDomEngine::ResetRuntime(void)
    m_dayStamp = 0;
    m_dailyLockSince = 0;
    m_dailyHitSticky = m_dailyLossSticky = m_dailyFloorSticky = false;
+   m_dailyFloorArmed = false;
    m_dailyFloorLevel = 0.0;
+   m_dailyFloorArmLevel = 0.0;
+   m_dailyPeakEquity = 0.0;
    m_dailyClosed = m_dailyPnl = 0.0;
    m_lastError = "";
    m_lastRenderMs = 0;
@@ -440,6 +446,8 @@ void CDomEngine::RefreshDaily(void)
       m_dailyHitSticky   = false;
       m_dailyLossSticky  = false;
       m_dailyFloorSticky = false;
+      m_dailyFloorArmed  = false;
+      m_dailyPeakEquity  = 0.0;
       m_dailyLockSince   = 0;
      }
 
@@ -463,11 +471,20 @@ void CDomEngine::RefreshDaily(void)
       m_dailyPnl <= -m_cfg.dailyMaxLoss + DP_MONEY_EPS)
       m_dailyLossSticky = true;
 
-   m_dailyFloorLevel = DpDailyFloorTrigger(m_cfg.dailyStartBalance, m_cfg.dailyFloorBufferPct);
-   if(m_cfg.enableDailyFloor && m_cfg.dailyStartBalance > 0.0 && m_dailyFloorLevel > 0.0)
+   m_dailyFloorLevel    = DpDailyFloorTrigger(m_cfg.dailyStartBalance, m_cfg.dailyFloorBufferPct);
+   m_dailyFloorArmLevel = DpDailyFloorTrigger(m_cfg.dailyStartBalance, m_cfg.dailyFloorArmPct);
+   if(m_cfg.enableDailyFloor && m_cfg.dailyStartBalance > 0.0)
      {
       double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-      if(equity <= m_dailyFloorLevel + DP_MONEY_EPS)
+      if(equity > m_dailyPeakEquity)
+         m_dailyPeakEquity = equity;
+      // Inactive until peak equity has reached start + arm% (e.g. 630 on a 600 seed).
+      // Sticky so a later drawdown is still protected.
+      if(m_dailyFloorArmLevel > 0.0 &&
+         m_dailyPeakEquity + DP_MONEY_EPS >= m_dailyFloorArmLevel)
+         m_dailyFloorArmed = true;
+      if(m_dailyFloorArmed && m_dailyFloorLevel > 0.0 &&
+         equity <= m_dailyFloorLevel + DP_MONEY_EPS)
          m_dailyFloorSticky = true;
      }
   }
@@ -956,6 +973,8 @@ void CDomEngine::BuildView(void)
    g.dailyFloorOn       = m_cfg.enableDailyFloor;
    g.dailyStartBalance  = m_cfg.dailyStartBalance;
    g.dailyFloorLevel    = m_dailyFloorLevel;
+   g.dailyFloorArmLevel = m_dailyFloorArmLevel;
+   g.dailyFloorArmed    = m_dailyFloorArmed;
    g.dailyFloorHit      = m_dailyFloorSticky;
    g.dryRun          = m_cfg.dryRun;
    g.armed           = m_armed;
@@ -1007,6 +1026,9 @@ void CDomEngine::BuildView(void)
       m_vm.headline = "Algo Trading OFF — guards cannot close";
    else if(m_dailyFloorSticky)
       m_vm.headline = "START FLOOR — flattening / blocking for today";
+   else if(m_cfg.enableDailyFloor && !m_dailyFloorArmed)
+      m_vm.headline = "Floor waiting — arm at "
+                      + DoubleToString(m_dailyFloorArmLevel, 2);
    else if(m_dailyLossSticky)
       m_vm.headline = "Daily loss cap hit — flattening / blocking";
    else if(m_dailyHitSticky)
@@ -1160,6 +1182,18 @@ bool CDomEngine::Init(const SDpConfig &cfg)
       m_cfg.dailyFloorBufferPct = 0.0;
    if(m_cfg.dailyFloorBufferPct > 100.0)
       m_cfg.dailyFloorBufferPct = 100.0;
+   if(m_cfg.dailyFloorArmPct < 0.0)
+      m_cfg.dailyFloorArmPct = 0.0;
+   if(m_cfg.dailyFloorArmPct > 100.0)
+      m_cfg.dailyFloorArmPct = 100.0;
+   if(m_cfg.enableDailyFloor &&
+      m_cfg.dailyFloorArmPct <= m_cfg.dailyFloorBufferPct)
+     {
+      Print(DP_LOG_PREFIX,
+            "Daily Start Floor: Arm % must be greater than Buffer % "
+            "(else it would lock the moment it arms). Default 5 vs 3.");
+      return false;
+     }
 
    m_time.Configure(m_cfg);
    if(!m_time.SpecOk())

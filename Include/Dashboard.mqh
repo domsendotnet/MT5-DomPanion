@@ -632,15 +632,22 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
      }
    else
      {
-      v6 = "ON  eq vs " + DoubleToString(g.dailyFloorLevel, 2)
-           + "  (start " + DoubleToString(g.dailyStartBalance, 0) + ")";
       if(g.dailyFloorHit)
         {
-         v6 += "  LOCKED";
+         v6 = "LOCKED  eq vs " + DoubleToString(g.dailyFloorLevel, 2);
          c6 = m_theme.red;
         }
+      else if(!g.dailyFloorArmed)
+        {
+         v6 = "wait  arm at " + DoubleToString(g.dailyFloorArmLevel, 2)
+              + "  (start " + DoubleToString(g.dailyStartBalance, 0) + ")";
+         c6 = m_theme.amber;
+        }
       else
+        {
+         v6 = "armed  kill " + DoubleToString(g.dailyFloorLevel, 2);
          c6 = m_theme.green;
+        }
      }
 
    string keys[6];

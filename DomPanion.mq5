@@ -11,7 +11,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Dominik Fischer"
 #property link        "https://github.com/domsendotnet/MT5-DomPanion"
-#property version     "1.01"
+#property version     "1.02"
 #property description "DomPanion — session clock, lot cap, money TP/SL with breathing room, scale-in block, daily start floor."
 #property description "Does not open trades. Attach to the chart you trade."
 
@@ -83,6 +83,7 @@ input group "6. Daily Start Floor"
 input bool              InpEnableDailyFloor  = false;           // Enable daily start-balance floor
 input double            InpDailyStartBalance = 600.0;           // Starting balance (resets each broker day)
 input double            InpDailyFloorBufferPct = 3.0;           // Flatten when equity is within this % of the start
+input double            InpDailyFloorArmPct    = 5.0;           // Inactive until equity has reached start + this % (e.g. 630 on 600)
 
 input group "Alerts"
 input bool              InpAlertOnClose      = true;            // Terminal Alert on a guard close
@@ -152,6 +153,7 @@ void DpFillConfig(SDpConfig &cfg)
    cfg.enableDailyFloor   = InpEnableDailyFloor;
    cfg.dailyStartBalance  = InpDailyStartBalance;
    cfg.dailyFloorBufferPct= InpDailyFloorBufferPct;
+   cfg.dailyFloorArmPct   = InpDailyFloorArmPct;
 
    cfg.alertOnClose       = InpAlertOnClose;
    cfg.notifyOnClose      = InpNotifyOnClose;
