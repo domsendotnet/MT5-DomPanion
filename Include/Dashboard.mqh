@@ -570,7 +570,7 @@ void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
 
 void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
   {
-   if(!Room(m_row * 6))
+   if(!Room(m_row * 7))
       return;
    SectionTitle("GUARDS", x0);
    Font(m_fsSm, false);
@@ -622,16 +622,38 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
          c5 = m_theme.green;
      }
 
-   string keys[5];
-   string vals[5];
-   color  cols[5];
+   string k6 = "Floor";
+   string v6;
+   color  c6;
+   if(!g.dailyFloorOn)
+     {
+      v6 = "off";
+      c6 = m_theme.muted;
+     }
+   else
+     {
+      v6 = "ON  eq vs " + DoubleToString(g.dailyFloorLevel, 2)
+           + "  (start " + DoubleToString(g.dailyStartBalance, 0) + ")";
+      if(g.dailyFloorHit)
+        {
+         v6 += "  LOCKED";
+         c6 = m_theme.red;
+        }
+      else
+         c6 = m_theme.green;
+     }
+
+   string keys[6];
+   string vals[6];
+   color  cols[6];
    keys[0] = k1; vals[0] = v1; cols[0] = c1;
    keys[1] = k2; vals[1] = v2; cols[1] = c2;
    keys[2] = k3; vals[2] = v3; cols[2] = c3;
    keys[3] = k4; vals[3] = v4; cols[3] = c4;
    keys[4] = k5; vals[4] = v5; cols[4] = c5;
+   keys[5] = k6; vals[5] = v6; cols[5] = c6;
 
-   for(int i = 0; i < 5; i++)
+   for(int i = 0; i < 6; i++)
      {
       if(!Room(m_row))
          break;
@@ -783,7 +805,7 @@ void CDashboard::Render(const SViewModel &vm)
                + Px(24)             // separators
                + m_row              // POSITION title
                + posBlock
-               + m_row * 7          // guards
+               + m_row * 8          // guards
                + (vm.actionCount > 0 ? m_row * 4 : 0)
                + Px(12);
    int clockH = m_row + 4 * (Px(22) + Px(3)) + m_row * 3 + Px(8);

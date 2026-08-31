@@ -351,6 +351,18 @@ double DpUnits001(const double volume, const double lotUnit)
    return volume / u;
   }
 
+// Equity level that trips the daily start-balance floor.
+// 600 start + 3% buffer → 618. Close when equity is at or below this.
+double DpDailyFloorTrigger(const double startBalance, const double bufferPct)
+  {
+   if(startBalance <= 0.0)
+      return 0.0;
+   double pct = bufferPct;
+   if(pct < 0.0)
+      pct = 0.0;
+   return startBalance * (1.0 + pct / 100.0);
+  }
+
 //+------------------------------------------------------------------+
 ENUM_ORDER_TYPE_FILLING DpFillingFor(const string symbol)
   {

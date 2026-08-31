@@ -2,7 +2,7 @@
 
 Copyright © 2026 Dominik Fischer
 
-Companion Expert Advisor for MetaTrader 5. It does **not** open trades. It watches yours and closes anything that breaks the rules you set — lot size, extra positions, money TP/SL, losing hours.
+Companion Expert Advisor for MetaTrader 5. It does **not** open trades. It watches yours and closes anything that breaks the rules you set — lot size, extra positions, money TP/SL, losing hours, daily start-balance floor.
 
 Built for high-leverage, low-balance discretionary trading: the pattern of making a few hundred / a few thousand and then giving it back by scaling into losers and oversizing.
 
@@ -32,6 +32,7 @@ The compiled `.ex5` is standalone. `Include/` is only needed at compile time.
 3. **Money TP / breathing SL** — Take-profit and stop are in money per 0.01, scaled by volume. A 3× breath multiplier lets a trade go 2–3× the target against you before it is killed. That is the room you use to recover, with a hard ceiling so one failure cannot wipe the account.
 4. **Scale-in block** — If one position is open, a 2nd/3rd is closed (hedging). On netting, an add is cut back to the previous volume. Matching pending orders are deleted.
 5. **Daily goal lock (optional)** — After today’s P/L hits a money target (e.g. 400), new trades are blocked. Optional flatten. Optional daily max loss.
+6. **Daily start floor (optional)** — You set a seed for the day (e.g. 600). If **account equity** comes within a buffer of that seed (default 3% → trigger at 618), every matching trade is closed and any new trade is closed for the rest of the broker day. The lock resets at midnight; the seed value stays what you configured.
 
 ## How it works
 
@@ -129,6 +130,22 @@ Corner (top-left / top-right / bottom-left / bottom-right), theme, offsets, widt
 
 Resets at broker midnight.
 
+### 6. Daily Start Floor
+
+Protects the day’s seed so a drawdown cannot chew through it.
+
+Example: start **600**, buffer **3%**. Trigger equity = `600 × 1.03 = 618`. Balance 740 with equity 620 is ~3% above 600 — close enough that the next tick of drawdown flattens everything.
+
+| Input | Meaning |
+|---|---|
+| Enable | Off by default |
+| Starting balance | Seed for the day (e.g. 600). You set this; it does not auto-snapshot account balance |
+| Buffer % | Flatten when equity ≤ start × (1 + this/100). `0` = at the seed exactly |
+
+Uses **account equity** (floating drawdown counts), not balance. Flatten ignores “enforce on start” grandfathering and closes every position/pending that matches the magic filter, on every symbol. After the trip, new trades are closed until broker midnight even if equity recovers. If you deposit, you still wait until the next day (or turn the feature off).
+
+If equity is already at or below the trigger when you attach, it fires immediately.
+
 ### Alerts
 
 Terminal alert and/or push notification on a guard close.
@@ -140,6 +157,7 @@ Terminal alert and/or push notification on a guard close.
 3. Optionally tick **Dry run** for one session.
 4. Defaults already cap lots, enforce the money band, and block scale-in.
 5. Turn on daily lock only if you want to freeze a winning day.
+6. Turn on **Daily Start Floor**, set the seed to what you actually started the day with (600, 6000, …), keep 3% unless you want a tighter or looser cushion.
 
 ## License
 

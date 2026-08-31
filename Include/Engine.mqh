@@ -43,6 +43,8 @@ private:
    datetime          m_dailyLockSince;
    bool              m_dailyHitSticky;
    bool              m_dailyLossSticky;
+   bool              m_dailyFloorSticky;
+   double            m_dailyFloorLevel;
    double            m_dailyClosed;
    double            m_dailyPnl;
    string            m_lastError;
@@ -74,6 +76,7 @@ private:
    bool              InOneTradeScope(const string symbol) const;
    bool              Grandfathered(const datetime timeOpen) const;
    void              RefreshDaily(void);
+   void              EnqueueAccountFlatten(const ENUM_DP_REASON reason, const string detail);
    void              EvaluatePendings(void);
    void              EvaluatePositions(void);
    void              ApplyMoneyAndStops(const int idx, const bool willClose);
@@ -110,7 +113,8 @@ void CDomEngine::ResetRuntime(void)
    m_initTime = 0;
    m_dayStamp = 0;
    m_dailyLockSince = 0;
-   m_dailyHitSticky = m_dailyLossSticky = false;
+   m_dailyHitSticky = m_dailyLossSticky = m_dailyFloorSticky = false;
+   m_dailyFloorLevel = 0.0;
    m_dailyClosed = m_dailyPnl = 0.0;
    m_lastError = "";
    m_lastRenderMs = 0;
@@ -171,6 +175,7 @@ int CDomEngine::ReasonRank(const ENUM_DP_REASON r) const
   {
    switch(r)
      {
+      case DP_REASON_DAILY_FLOOR:   return 110;
       case DP_REASON_DAILY_LOSS:    return 100;
       case DP_REASON_HARD_STOP:     return 90;
       case DP_REASON_AMBER_TIMEOUT: return 80;
@@ -431,10 +436,11 @@ void CDomEngine::RefreshDaily(void)
    datetime day = DpDayStartServer();
    if(day != m_dayStamp)
      {
-      m_dayStamp        = day;
-      m_dailyHitSticky  = false;
-      m_dailyLossSticky = false;
-      m_dailyLockSince  = 0;
+      m_dayStamp         = day;
+      m_dailyHitSticky   = false;
+      m_dailyLossSticky  = false;
+      m_dailyFloorSticky = false;
+      m_dailyLockSince   = 0;
      }
 
    bool filterSym = (m_cfg.manageScope == DP_SCOPE_CHART_SYMBOL);
@@ -456,6 +462,46 @@ void CDomEngine::RefreshDaily(void)
    if(m_cfg.enableDailyLock && m_cfg.dailyMaxLoss > 0.0 &&
       m_dailyPnl <= -m_cfg.dailyMaxLoss + DP_MONEY_EPS)
       m_dailyLossSticky = true;
+
+   m_dailyFloorLevel = DpDailyFloorTrigger(m_cfg.dailyStartBalance, m_cfg.dailyFloorBufferPct);
+   if(m_cfg.enableDailyFloor && m_cfg.dailyStartBalance > 0.0 && m_dailyFloorLevel > 0.0)
+     {
+      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      if(equity <= m_dailyFloorLevel + DP_MONEY_EPS)
+         m_dailyFloorSticky = true;
+     }
+  }
+
+void CDomEngine::EnqueueAccountFlatten(const ENUM_DP_REASON reason, const string detail)
+  {
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(!DpManageMagic(PositionGetInteger(POSITION_MAGIC), m_cfg))
+         continue;
+      Enqueue(ticket, false, 0.0, reason, detail);
+     }
+
+   int orders = OrdersTotal();
+   for(int i = 0; i < orders; i++)
+     {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!OrderSelect(ticket))
+         continue;
+      ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      if(type == ORDER_TYPE_BUY || type == ORDER_TYPE_SELL)
+         continue;
+      if(!DpManageMagic(OrderGetInteger(ORDER_MAGIC), m_cfg))
+         continue;
+      Enqueue(ticket, true, 0.0, reason, detail);
+     }
   }
 
 void CDomEngine::EvaluatePendings(void)
@@ -475,13 +521,18 @@ void CDomEngine::EvaluatePendings(void)
 
    for(int i = 0; i < m_pendN; i++)
      {
-      if(Grandfathered(m_pend[i].timeSetup))
-         continue;
-
       ENUM_DP_REASON reason = DP_REASON_NONE;
       string detail = "";
 
-      if(m_dailyLossSticky)
+      if(m_dailyFloorSticky)
+        {
+         reason = DP_REASON_DAILY_FLOOR;
+         detail = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+                  + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
+        }
+      else if(Grandfathered(m_pend[i].timeSetup))
+         continue;
+      else if(m_dailyLossSticky)
         {
          reason = DP_REASON_DAILY_LOSS;
          detail = "daily loss cap";
@@ -565,7 +616,13 @@ void CDomEngine::EvaluatePositions(void)
       string detail = "";
       double closeVol = 0.0; // full
 
-      if(!gf && m_dailyLossSticky)
+      if(m_dailyFloorSticky)
+        {
+         reason = DP_REASON_DAILY_FLOOR;
+         detail = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+                  + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
+        }
+      else if(!gf && m_dailyLossSticky)
         {
          reason = DP_REASON_DAILY_LOSS;
          detail = "daily PnL " + DoubleToString(m_dailyPnl, 2);
@@ -894,8 +951,12 @@ void CDomEngine::BuildView(void)
    g.dailyOn         = m_cfg.enableDailyLock;
    g.dailyPnl        = m_dailyPnl;
    g.dailyTarget     = m_cfg.dailyLockMoney;
-   g.dailyHit        = m_dailyHitSticky;
-   g.dailyLossHit    = m_dailyLossSticky;
+   g.dailyHit           = m_dailyHitSticky;
+   g.dailyLossHit       = m_dailyLossSticky;
+   g.dailyFloorOn       = m_cfg.enableDailyFloor;
+   g.dailyStartBalance  = m_cfg.dailyStartBalance;
+   g.dailyFloorLevel    = m_dailyFloorLevel;
+   g.dailyFloorHit      = m_dailyFloorSticky;
    g.dryRun          = m_cfg.dryRun;
    g.armed           = m_armed;
    g.ownerConflict   = m_ownerConflict;
@@ -944,6 +1005,8 @@ void CDomEngine::BuildView(void)
       m_vm.headline = "Standby — another DomPanion owns all-symbols mode";
    else if(!g.tradeAllowed)
       m_vm.headline = "Algo Trading OFF — guards cannot close";
+   else if(m_dailyFloorSticky)
+      m_vm.headline = "START FLOOR — flattening / blocking for today";
    else if(m_dailyLossSticky)
       m_vm.headline = "Daily loss cap hit — flattening / blocking";
    else if(m_dailyHitSticky)
@@ -992,6 +1055,12 @@ void CDomEngine::Work(void)
    if(m_armed)
      {
       RefreshDaily();
+      if(m_dailyFloorSticky)
+        {
+         string det = "eq " + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2)
+                      + " <= floor " + DoubleToString(m_dailyFloorLevel, 2);
+         EnqueueAccountFlatten(DP_REASON_DAILY_FLOOR, det);
+        }
       EvaluatePendings();
       EvaluatePositions();
       PruneState();
@@ -1082,6 +1151,15 @@ bool CDomEngine::Init(const SDpConfig &cfg)
       Print(DP_LOG_PREFIX, "Money Guard needs TP per 0.01 and SL per 0.01 > 0");
       return false;
      }
+   if(m_cfg.enableDailyFloor && m_cfg.dailyStartBalance <= 0.0)
+     {
+      Print(DP_LOG_PREFIX, "Daily Start Floor needs Starting balance > 0");
+      return false;
+     }
+   if(m_cfg.dailyFloorBufferPct < 0.0)
+      m_cfg.dailyFloorBufferPct = 0.0;
+   if(m_cfg.dailyFloorBufferPct > 100.0)
+      m_cfg.dailyFloorBufferPct = 100.0;
 
    m_time.Configure(m_cfg);
    if(!m_time.SpecOk())

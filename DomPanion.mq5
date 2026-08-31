@@ -11,8 +11,8 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Dominik Fischer"
 #property link        "https://github.com/domsendotnet/MT5-DomPanion"
-#property version     "1.00"
-#property description "DomPanion — session clock, lot cap, money TP/SL with breathing room, scale-in block."
+#property version     "1.01"
+#property description "DomPanion — session clock, lot cap, money TP/SL with breathing room, scale-in block, daily start floor."
 #property description "Does not open trades. Attach to the chart you trade."
 
 #include "Include/Types.mqh"
@@ -79,6 +79,11 @@ input double            InpDailyLockMoney    = 400.0;           // Block new tra
 input bool              InpDailyLockFlatten  = false;           // Also close the open trade when the goal hits
 input double            InpDailyMaxLoss      = 0.0;             // Flatten + block if today ≤ -this (0 = off)
 
+input group "6. Daily Start Floor"
+input bool              InpEnableDailyFloor  = false;           // Enable daily start-balance floor
+input double            InpDailyStartBalance = 600.0;           // Starting balance (resets each broker day)
+input double            InpDailyFloorBufferPct = 3.0;           // Flatten when equity is within this % of the start
+
 input group "Alerts"
 input bool              InpAlertOnClose      = true;            // Terminal Alert on a guard close
 input bool              InpNotifyOnClose     = false;           // Push notification on a guard close
@@ -143,6 +148,10 @@ void DpFillConfig(SDpConfig &cfg)
    cfg.dailyLockMoney     = InpDailyLockMoney;
    cfg.dailyLockFlatten   = InpDailyLockFlatten;
    cfg.dailyMaxLoss       = InpDailyMaxLoss;
+
+   cfg.enableDailyFloor   = InpEnableDailyFloor;
+   cfg.dailyStartBalance  = InpDailyStartBalance;
+   cfg.dailyFloorBufferPct= InpDailyFloorBufferPct;
 
    cfg.alertOnClose       = InpAlertOnClose;
    cfg.notifyOnClose      = InpNotifyOnClose;

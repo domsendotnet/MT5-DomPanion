@@ -76,7 +76,8 @@ enum ENUM_DP_REASON
    DP_REASON_PROFIT_LOCK   = 8,
    DP_REASON_DAILY_LOCK    = 9,
    DP_REASON_DAILY_LOSS    = 10,
-   DP_REASON_PENDING       = 11
+   DP_REASON_PENDING       = 11,
+   DP_REASON_DAILY_FLOOR   = 12
   };
 
 //+------------------------------------------------------------------+
@@ -139,6 +140,10 @@ struct SDpConfig
    double            dailyLockMoney;
    bool              dailyLockFlatten;
    double            dailyMaxLoss;
+
+   bool              enableDailyFloor;
+   double            dailyStartBalance;
+   double            dailyFloorBufferPct;
 
    bool              alertOnClose;
    bool              notifyOnClose;
@@ -287,6 +292,10 @@ struct SGuardView
    double            dailyTarget;
    bool              dailyHit;
    bool              dailyLossHit;
+   bool              dailyFloorOn;
+   double            dailyStartBalance;
+   double            dailyFloorLevel;
+   bool              dailyFloorHit;
    bool              dryRun;
    bool              armed;
    bool              ownerConflict;
@@ -327,6 +336,7 @@ string DpReasonText(const ENUM_DP_REASON reason)
       case DP_REASON_DAILY_LOCK:    return "daily goal";
       case DP_REASON_DAILY_LOSS:    return "daily loss cap";
       case DP_REASON_PENDING:       return "pending blocked";
+      case DP_REASON_DAILY_FLOOR:   return "daily start floor";
       default:                      return "none";
      }
   }
