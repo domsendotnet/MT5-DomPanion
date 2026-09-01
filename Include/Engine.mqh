@@ -61,6 +61,8 @@ private:
    SAtlBasket        m_atl[DP_MAX_ATL_BASKETS];
    int               m_atlN;
    uint              m_atlLastPlaceMs;
+   uint              m_atlLastSkipLogMs;
+   string            m_atlNote;
 
    void              ResetRuntime(void);
    bool              NoteOnce(const ulong ticket);
@@ -117,6 +119,12 @@ private:
    bool              PolicyBlockNew(void) const;
    void              AtlCancelPendings(const string symbol, const ENUM_POSITION_TYPE type);
    void              AtlCancelAllPendings(void);
+   void              AtlSkip(const string why, const bool noisy);
+   bool              AtlLimitDistOk(const string symbol, const bool buy, const double price) const;
+   bool              AtlSendMarket(const bool buy, const double vol, const string symbol,
+                                   const string cmt);
+   bool              AtlSendLimit(const bool buy, const double vol, const double price,
+                                  const string symbol, const string cmt);
    void              AtlPlaceNext(SAtlBasket &b);
    void              RunAddToLosers(void);
    void              AtlFillView(SGuardView &g) const;
@@ -143,6 +151,8 @@ void CDomEngine::ResetRuntime(void)
    m_posN = m_pendN = m_stN = m_qN = m_actionN = m_notedN = m_deadN = 0;
    m_atlN = 0;
    m_atlLastPlaceMs = 0;
+   m_atlLastSkipLogMs = 0;
+   m_atlNote = "";
    m_inPulse = m_needReplay = m_armed = m_ownerConflict = false;
    m_initTime = 0;
    m_dayStamp = 0;

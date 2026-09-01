@@ -43,7 +43,7 @@ The compiled `.ex5` is standalone. `Include/` is only needed at compile time.
 4. **Scale-in block** — If one position is open, a 2nd/3rd is closed (hedging). On netting, an add is cut back to the previous volume. Matching pending orders are deleted. Same-way adds are kept if **add to losers** is on.
 5. **Daily goal lock (optional)** — After today’s P/L hits a money target (e.g. 400), new trades are blocked. Optional flatten. Optional daily max loss.
 6. **Daily start floor (optional)** — You set a seed for the day (e.g. 600). If **account equity** comes within a buffer of that seed (default 3% → trigger at 618), every **watched** trade is closed and any new watched trade is closed for the rest of the broker day. The lock resets at midnight; the seed value stays what you configured. Floor uses account equity; if you need every symbol covered, set **Watch** to Whole account.
-7. **Add to losers (optional, off)** — After you add a second same-way trade, the EA keeps adding at 2×/3×/4× that gap and closes the basket at break-even + extra % of balance. While the grid is live, a dashed line on this chart marks combined **break-even** (lot-weighted, swap and commission included). It moves when a leg is added and is removed when the basket is closed.
+7. **Add to losers (optional, off)** — After you add a second same-way trade, the EA places a **limit** at 2× that gap (then 3×, 4×…). It does not market a 3rd trade immediately. The basket closes at break-even + extra % of balance. Each add ticket must still fit the lot cap; the basket total may be larger. The GUARDS → ATL line shows why an add is waiting (limit sitting, lot cap, blocked hour, …). A dashed **ATL BE** line on this chart is combined break-even of the open legs.
 
 ## How it works
 
@@ -87,7 +87,7 @@ MT5 → Inputs. Ten groups. Read the left column; the right column is the value.
 
 Example for start money `600`: wait until up `5` (630), then close if only up `3` (618). Wait % must be bigger than close %.
 
-**Add to losers:** You open a trade, it goes against you, you add a second the same way. Gap is locked. Further adds at 2×, 3×, 4×… of that gap. Combined profit ≥ extra % of balance → close the basket. The orange dashed **ATL BE** line is the price where the current lots (not the pending next add) are even.
+**Add to losers:** You open a trade, it goes against you, you add a second the same way. Gap is locked. The EA then rests a **limit** at 2× that gap (then 3×, 4×) — it does not fire a 3rd market trade the instant you add. Combined profit ≥ extra % of balance → close the basket. The orange dashed **ATL BE** line is the price where the current lots (not the pending next add) are even.
 
 How the rules stack (highest first):
 
@@ -95,13 +95,13 @@ How the rules stack (highest first):
 2. Add-to-losers BE — close that basket only.
 3. Daily win goal — if flatten is on, flatten everything; if not, keep the grid but **no new adds**.
 4. Bad hours — no new trades and no new grid adds; an already-running grid is left for BE or the floor.
-5. Lot cap — a **single** ticket bigger than max is always closed; the grid will not add if total size would exceed max.
+5. Lot cap — a **single** ticket bigger than max is always closed. An add-to-losers **add** must itself fit that max; the whole grid may be larger.
 6. Only 1 trade — still kills the other direction / other symbols. Same-way adds are allowed while add-to-losers is on.
 7. Money TP/SL — on a **single** trade. The moment a second same-way trade exists, SL/TP are cleared and per-trade exits stay off (the basket exits together).
 
 Off by default. High risk. Demo first.
 
-## Live (v1.25)
+## Live (v1.26)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
@@ -111,7 +111,7 @@ This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, co
 4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
 5. **Add to losers** is off. Turn it on only if you understand the grid. **Only 1 trade** can stay on; same-direction adds are allowed, extras the other way are not.
 
-v1.25: ATL limit place no longer feeds the comment into expiration (the string-to-number compile warning). Dashed **ATL BE** line is still lot-weighted break-even of the live basket.
+v1.26: add-to-losers actually places the next limit (RETURN filling, not IOC), does not abort on spread, and lot-caps each add ticket rather than the whole grid. The ATL guard line shows the skip reason. Recompile if a 2nd add never grew the grid.
 
 ## License
 

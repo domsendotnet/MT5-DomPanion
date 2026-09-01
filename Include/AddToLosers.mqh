@@ -35,8 +35,9 @@ bool CDomEngine::AtlFromDeals(const SPosSnap &p, double &first, double &step,
    if(!HistorySelectByPosition(p.id))
       return false;
 
-   double px[];
-   double vol[];
+   double   px[];
+   double   vol[];
+   datetime tm[];
    int n = 0;
    int deals = HistoryDealsTotal();
    for(int i = 0; i < deals; i++)
@@ -51,13 +52,27 @@ bool CDomEngine::AtlFromDeals(const SPosSnap &p, double &first, double &step,
       if(en != DEAL_ENTRY_IN && en != DEAL_ENTRY_INOUT)
          continue;
       int k = n++;
-      if(ArrayResize(px, n, 8) < n || ArrayResize(vol, n, 8) < n)
+      if(ArrayResize(px, n, 8) < n || ArrayResize(vol, n, 8) < n ||
+         ArrayResize(tm, n, 8) < n)
          break;
       px[k]  = HistoryDealGetDouble(d, DEAL_PRICE);
       vol[k] = HistoryDealGetDouble(d, DEAL_VOLUME);
+      tm[k]  = (datetime)HistoryDealGetInteger(d, DEAL_TIME);
      }
    if(n < 2)
       return false;
+   for(int i = 0; i < n - 1; i++)
+     {
+      for(int j = i + 1; j < n; j++)
+        {
+         if(tm[j] < tm[i] || (tm[j] == tm[i] && px[j] < px[i]))
+           {
+            datetime tt = tm[i]; tm[i] = tm[j]; tm[j] = tt;
+            double tp = px[i];  px[i] = px[j];  px[j] = tp;
+            double tv = vol[i]; vol[i] = vol[j]; vol[j] = tv;
+           }
+        }
+     }
    first  = px[0];
    step   = MathAbs(px[1] - px[0]);
    addVol = vol[1];
@@ -173,7 +188,7 @@ void CDomEngine::RebuildAtlBaskets(void)
       double tick = SymbolInfoDouble(basket.symbol, SYMBOL_TRADE_TICK_SIZE);
       if(tick <= 0.0)
          tick = SymbolInfoDouble(basket.symbol, SYMBOL_POINT);
-      bool ok = (legs >= 2 && basket.step >= tick * 2.0);
+      bool ok = (legs >= 2 && basket.step >= tick);
       basket.active = ok;
       basket.bePrice = (ok ? AtlBasketBePrice(basket) : 0.0);
 
@@ -456,12 +471,87 @@ void CDomEngine::AtlCancelAllPendings(void)
      }
   }
 
+void CDomEngine::AtlSkip(const string why, const bool noisy)
+  {
+   m_atlNote = why;
+   if(!noisy)
+      return;
+   uint nowMs = GetTickCount();
+   if(m_atlLastSkipLogMs != 0 && (nowMs - m_atlLastSkipLogMs) < 5000)
+      return;
+   m_atlLastSkipLogMs = nowMs;
+   DpLog(1, m_cfg.logLevel, "ATL skip: " + why);
+  }
+
+bool CDomEngine::AtlLimitDistOk(const string symbol, const bool buy, const double price) const
+  {
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point <= 0.0)
+      return false;
+   double minDist = (double)DpStopsLevelPoints(symbol) * point;
+   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+   if(buy)
+      return (ask - price >= minDist);
+   return (price - bid >= minDist);
+  }
+
+bool CDomEngine::AtlSendMarket(const bool buy, const double vol, const string symbol,
+                               const string cmt)
+  {
+   ENUM_ORDER_TYPE_FILLING modes[3];
+   int nm = 0;
+   uint filling = (uint)SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+   if((filling & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC)
+      modes[nm++] = ORDER_FILLING_IOC;
+   if((filling & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK)
+      modes[nm++] = ORDER_FILLING_FOK;
+   modes[nm++] = ORDER_FILLING_RETURN;
+
+   for(int i = 0; i < nm; i++)
+     {
+      m_trade.SetTypeFilling(modes[i]);
+      m_trade.SetExpertMagicNumber(DP_ATL_MAGIC);
+      bool ok = buy ? m_trade.Buy(vol, symbol, 0.0, 0.0, 0.0, cmt)
+                    : m_trade.Sell(vol, symbol, 0.0, 0.0, 0.0, cmt);
+      if(ok)
+         return true;
+      if(m_trade.ResultRetcode() != TRADE_RETCODE_INVALID_FILL)
+         return false;
+     }
+   return false;
+  }
+
+bool CDomEngine::AtlSendLimit(const bool buy, const double vol, const double price,
+                              const string symbol, const string cmt)
+  {
+   // Pendings must not inherit IOC from DpPrepareTrade — brokers reject that.
+   m_trade.SetTypeFilling(ORDER_FILLING_RETURN);
+   m_trade.SetExpertMagicNumber(DP_ATL_MAGIC);
+   bool ok = buy ? m_trade.BuyLimit(vol, price, symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt)
+                 : m_trade.SellLimit(vol, price, symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt);
+   if(ok)
+      return true;
+   if(m_trade.ResultRetcode() != TRADE_RETCODE_INVALID_FILL)
+      return false;
+   m_trade.SetTypeFilling(DpFillingFor(symbol));
+   m_trade.SetExpertMagicNumber(DP_ATL_MAGIC);
+   return buy ? m_trade.BuyLimit(vol, price, symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt)
+              : m_trade.SellLimit(vol, price, symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt);
+  }
+
 void CDomEngine::AtlPlaceNext(SAtlBasket &b)
   {
    if(b.nextMult < 2 || b.nextPrice <= 0.0)
+     {
+      AtlSkip(IntegerToString(b.n) + " legs  max trades", false);
       return;
+     }
    if(AtlBlockedAdds())
+     {
+      AtlSkip("adds blocked (hour/daily/algo)", true);
       return;
+     }
 
    uint nowMs = GetTickCount();
    if(m_atlLastPlaceMs != 0 && (nowMs - m_atlLastPlaceMs) < 1500)
@@ -469,39 +559,52 @@ void CDomEngine::AtlPlaceNext(SAtlBasket &b)
 
    double vol = DpNormalizeVolume(b.symbol, b.addVolume);
    if(vol <= DP_VOLUME_EPS)
+     {
+      AtlSkip("add volume 0", true);
       return;
+     }
 
+   // Per ticket, same as the lot guard. Basket total may exceed max — that is the grid.
    if(m_cfg.enableLotGuard)
      {
       double money = DpLotRefValue(m_cfg.lotReference);
       double maxLots = DpMaxLots(b.symbol, money, m_cfg.balancePer001, m_cfg.lotUnit);
-      double have = 0.0;
-      for(int i = 0; i < b.n; i++)
-         have += m_pos[b.idx[i]].volume;
-      if(have + vol > maxLots + DP_VOLUME_EPS)
+      if(vol > maxLots + DP_VOLUME_EPS)
         {
-         b.nextMult = 0;
+         AtlSkip("add " + DpLots(vol) + " > max " + DpLots(maxLots), true);
          return;
         }
      }
 
    double ask = SymbolInfoDouble(b.symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(b.symbol, SYMBOL_BID);
-   double spread = ask - bid;
-   if(b.step > 0.0 && spread > b.step * 0.35)
+   if(ask <= 0.0 || bid <= 0.0)
+     {
+      AtlSkip("no quote", true);
       return;
-
+     }
+   double spread = ask - bid;
    bool buy = (b.type == POSITION_TYPE_BUY);
-   bool through = buy ? (ask <= b.nextPrice + spread * 0.5)
-                      : (bid >= b.nextPrice - spread * 0.5);
+   bool through = buy ? (ask <= b.nextPrice) : (bid >= b.nextPrice);
+   if(!through && !AtlLimitDistOk(b.symbol, buy, b.nextPrice))
+      through = true;
+
+   if(through && b.step > 0.0 && spread > b.step * 0.80)
+     {
+      AtlSkip("spread " + DoubleToString(spread, (int)SymbolInfoInteger(b.symbol, SYMBOL_DIGITS))
+              + " vs gap", true);
+      return;
+     }
+
+   int digits = (int)SymbolInfoInteger(b.symbol, SYMBOL_DIGITS);
+   string pxTxt = DoubleToString(b.nextPrice, digits);
 
    if(m_cfg.dryRun)
      {
       m_atlLastPlaceMs = nowMs;
-      PushAction(DP_REASON_ATL_BE,
-                 "DRY ATL " + (through ? "market " : "limit ")
-                 + DoubleToString(b.nextPrice, (int)SymbolInfoInteger(b.symbol, SYMBOL_DIGITS))
-                 + "  x" + IntegerToString(b.nextMult));
+      m_atlNote = (through ? "DRY market x" : "DRY limit x")
+                  + IntegerToString(b.nextMult) + "  " + pxTxt;
+      PushAction(DP_REASON_ATL_BE, m_atlNote);
       return;
      }
 
@@ -513,7 +616,10 @@ void CDomEngine::AtlPlaceNext(SAtlBasket &b)
         {
          double px = OrderGetDouble(ORDER_PRICE_OPEN);
          if(DpPriceNear(b.symbol, px, b.nextPrice, b.step))
+           {
+            m_atlNote = "limit x" + IntegerToString(b.nextMult) + "  " + pxTxt;
             return;
+           }
          DpPrepareTrade(m_trade, b.symbol, m_cfg.slippagePoints);
          m_trade.OrderDelete(b.pendingTicket);
          b.pendingTicket = 0;
@@ -521,35 +627,29 @@ void CDomEngine::AtlPlaceNext(SAtlBasket &b)
      }
 
    DpPrepareTrade(m_trade, b.symbol, m_cfg.slippagePoints);
-   m_trade.SetExpertMagicNumber(DP_ATL_MAGIC);
    string cmt = DP_ATL_COMMENT;
-   bool ok = false;
-   if(through)
-     {
-      ok = buy ? m_trade.Buy(vol, b.symbol, 0.0, 0.0, 0.0, cmt)
-               : m_trade.Sell(vol, b.symbol, 0.0, 0.0, 0.0, cmt);
-     }
-   else
-     {
-      ok = buy ? m_trade.BuyLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt)
-               : m_trade.SellLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt);
-     }
+   bool ok = through ? AtlSendMarket(buy, vol, b.symbol, cmt)
+                     : AtlSendLimit(buy, vol, b.nextPrice, b.symbol, cmt);
    m_trade.SetExpertMagicNumber(0);
    m_atlLastPlaceMs = nowMs;
    if(!ok)
-      DpLog(0, m_cfg.logLevel,
-            "ATL place failed k=" + IntegerToString(b.nextMult)
-            + " ret=" + DpRetcodeText(m_trade.ResultRetcode()));
+     {
+      string err = "place fail k=" + IntegerToString(b.nextMult)
+                   + " ret=" + DpRetcodeText(m_trade.ResultRetcode());
+      m_atlNote = err;
+      DpLog(0, m_cfg.logLevel, "ATL " + err);
+     }
    else
-      DpLog(1, m_cfg.logLevel,
-            "ATL place " + (through ? "market" : "limit")
-            + " x" + IntegerToString(b.nextMult)
-            + " " + DoubleToString(b.nextPrice, (int)SymbolInfoInteger(b.symbol, SYMBOL_DIGITS))
-            + "  " + DpLots(vol));
+     {
+      m_atlNote = (through ? "market x" : "limit x")
+                  + IntegerToString(b.nextMult) + "  " + pxTxt;
+      DpLog(1, m_cfg.logLevel, "ATL " + m_atlNote + "  " + DpLots(vol));
+     }
   }
 
 void CDomEngine::RunAddToLosers(void)
   {
+   m_atlNote = "";
    if(!m_cfg.enableAtl)
      {
       AtlCancelAllPendings();
@@ -558,7 +658,10 @@ void CDomEngine::RunAddToLosers(void)
 
    bool blockAdds = AtlBlockedAdds();
    if(blockAdds)
+     {
       AtlCancelAllPendings();
+      AtlSkip("adds blocked (hour/daily/algo)", true);
+     }
 
    double target = AtlBeTarget();
    for(int b = 0; b < m_atlN; b++)
@@ -566,6 +669,8 @@ void CDomEngine::RunAddToLosers(void)
       if(!m_atl[b].active)
         {
          AtlCancelPendings(m_atl[b].symbol, m_atl[b].type);
+         if(!blockAdds && m_atl[b].n >= 2)
+            AtlSkip("2 trades but entry gap too small", true);
          continue;
         }
       if(m_atl[b].pnl + DP_MONEY_EPS >= target)
@@ -573,6 +678,7 @@ void CDomEngine::RunAddToLosers(void)
          string det = "basket " + DoubleToString(m_atl[b].pnl, 2)
                       + " >= BE+" + DoubleToString(target, 2);
          AtlEnqueueBasket(m_atl[b], det);
+         m_atlNote = "BE hit — closing";
          continue;
         }
       if(!blockAdds)
@@ -613,13 +719,18 @@ void CDomEngine::AtlFillView(SGuardView &g) const
    g.atlNextMult  = bsk.nextMult;
    g.atlBasketPnl = bsk.pnl;
    g.atlNextPrice = bsk.nextPrice;
-   if(bsk.pnl + DP_MONEY_EPS >= g.atlBeTarget)
+   if(StringLen(m_atlNote) > 0)
+      g.atlStatus = m_atlNote;
+   else if(bsk.pnl + DP_MONEY_EPS >= g.atlBeTarget)
       g.atlStatus = "BE hit — closing";
+   else if(bsk.pendingTicket > 0 && bsk.nextMult >= 2)
+      g.atlStatus = "limit x" + IntegerToString(bsk.nextMult) + "  "
+                    + DoubleToString(bsk.nextPrice, (int)SymbolInfoInteger(bsk.symbol, SYMBOL_DIGITS));
    else if(bsk.nextMult >= 2)
       g.atlStatus = "x" + IntegerToString(bsk.nextMult) + "  "
                     + DoubleToString(bsk.nextPrice, (int)SymbolInfoInteger(bsk.symbol, SYMBOL_DIGITS));
    else
-      g.atlStatus = IntegerToString(bsk.n) + " legs  cap";
+      g.atlStatus = IntegerToString(bsk.n) + " legs  max trades";
   }
 
 #endif
