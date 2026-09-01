@@ -67,37 +67,30 @@ Losing hours are classified from **entry time**, not the current clock. Block is
 
 ## Settings
 
-In MT5: right-click the chart → Expert Advisors → Properties → **Inputs**. Each line’s label is the full meaning. Everyday switches are at the top; **Advanced** is at the bottom — leave it unless you need it.
+MT5 → Inputs. Nine groups. Read the left column; the right column is the value.
 
-**On / off** — Practice mode (shows what would close, does not close). Panel. Pop-up / phone alert.
+| Group | What you set |
+|---|---|
+| **1 Practice** | Don't close — just show |
+| **2 Screen** | Panel, corner, pop-up, phone |
+| **3 Lots** | Money for 0.01 lot |
+| **4 Profit** | Win per 0.01, room per 0.01, close after this many rooms |
+| **5 Trades** | Only 1 trade |
+| **6 Hours** | Hour clock. Kill bad-hour trades (leave off at first). Bad hours / good hours |
+| **7 Today** | Win goal. Max loss (`0` = off) |
+| **8 Start money** | I started with. Wait until up %. Close if only up % |
+| **9 Extra** | Leave it |
 
-**Panel** — Corner and dark/light.
+Example for start money `600`: wait until up `5` (630), then close if only up `3` (618). Wait % must be bigger than close %.
 
-**1. Clock** — Builds the hour heatmap from past trades. “Close trades I open in a losing hour” stays **off** until you trust it. Optional: type hours like `0-6,16` or never-block `9-11`.
-
-**2. Lot size** — e.g. 2000 needed per 0.01. With 2300 on the account, 0.02 is closed.
-
-**3. Take profit and hard stop** — Money per 0.01 lot. Default: take 2, 1R is 2, hard close at 3× (so 0.01 dies at −6, 0.10 at −60). Optional broker SL/TP if the terminal dies.
-
-**4. One trade only** — A 2nd/3rd position is closed. Stops scaling into losers.
-
-**5. Daily goal** — Optional. After today is up X, block new trades. Optional flatten. Optional max loss.
-
-**6. Protect starting balance** — Optional. Set today’s seed (600, 6000, …). Stays **off** until equity has reached seed + 5% (630 on 600). After that, flatten if equity falls to seed + 3% (618). Arm % must be greater than the kill %. Dashboard: `wait arm at 630` → `armed kill 618` → `LOCKED`.
-
-**Advanced** — Whole-account vs this chart, magic filter, slippage, panel size, clock sample size, profit lock, amber timeout. Defaults are fine.
-
-If two copies use “whole account”, the second stands by.
-
-## Live (v1.13)
+## Live (v1.14)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
-1. Leave **Close trades in losing hours** off until the CLOCK looks right.
-2. Optional: **Dry run** for one session before it can close anything.
-3. Defaults already cap lots, enforce the money band, and block scale-in.
-4. Daily goal lock: only if you want to freeze a winning day.
-5. **Daily Start Floor**: set the seed to what you actually started with (600, 6000, …). It stays idle until you are 5% up, then protects the 3% cushion above the seed. If you attach with the seed still at 600 on a larger account, update it first.
+1. **Practice** on for a session if you want. Then off.
+2. **Hours → Kill bad-hour trades** leave off until the clock looks right.
+3. Lots, profit, and only-1-trade are already on.
+4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
 
 ## License
 

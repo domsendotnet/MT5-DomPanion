@@ -11,7 +11,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Dominik Fischer"
 #property link        "https://github.com/domsendotnet/MT5-DomPanion"
-#property version     "1.13"
+#property version     "1.14"
 #property description "DomPanion — session clock, lot cap, money TP/SL with breathing room, scale-in block, daily start floor."
 #property description "Does not open trades. Attach to the chart you trade."
 
@@ -19,78 +19,77 @@
 #include "Include/Engine.mqh"
 
 //+------------------------------------------------------------------+
-// Inputs: the // text is what you see in MT5. Everyday knobs first,
-// rare ones at the bottom under Advanced.
+// What you see in MT5 Inputs is the // text. Keep it tiny.
 //+------------------------------------------------------------------+
-input group "— On / off —"
-input bool              InpDryRun            = false; // Practice mode: show what would close, but do not close
-input bool              InpShowDashboard     = true;  // Show the panel on the chart
-input bool              InpAlertOnClose      = true;  // Pop-up when DomPanion closes a trade
-input bool              InpNotifyOnClose     = false; // Phone push when DomPanion closes a trade
+input group "1  Practice"
+input bool              InpDryRun              = false; // Don't close — just show
 
-input group "— Panel —"
-input ENUM_DP_CORNER    InpCorner            = DP_CORNER_RIGHT_TOP; // Where to put the panel
-input ENUM_DP_THEME     InpTheme             = DP_THEME_DARK;       // Look
+input group "2  Screen"
+input bool              InpShowDashboard       = true;                  // Show panel
+input ENUM_DP_CORNER    InpCorner              = DP_CORNER_RIGHT_TOP;   // Corner
+input ENUM_DP_THEME     InpTheme               = DP_THEME_DARK;         // Dark or light
+input bool              InpAlertOnClose        = true;                  // Pop-up
+input bool              InpNotifyOnClose       = false;                 // Phone
 
-input group "— 1. Clock (your win / lose hours) —"
-input bool              InpEnableTimeAnalysis= true;  // Show the hour clock from past trades
-input bool              InpBlockLosingHours  = false; // Close trades I open in a losing hour (leave off until you trust the clock)
-input string            InpManualLosingHours = "";    // Always-losing hours, e.g. 0-6,16,22-23
-input string            InpForceSafeHours    = "";    // Never-block hours, e.g. 9-11
+input group "3  Lots"
+input bool              InpEnableLotGuard      = true;    // Limit lots
+input double            InpBalancePer001       = 2000.0;  // Money for 0.01 lot
 
-input group "— 2. Lot size —"
-input bool              InpEnableLotGuard    = true;    // Stop me opening too much size
-input double            InpBalancePer001     = 2000.0;  // Account money needed for 0.01 lot  (2300 with 2000 → max 0.01)
+input group "4  Profit"
+input bool              InpEnableMoneyGuard    = true;  // Use money TP / SL
+input double            InpTpPer001            = 2.0;   // Win per 0.01
+input double            InpSlPer001            = 2.0;   // Room per 0.01
+input double            InpBreathMultiplier    = 3.0;   // Close after this many rooms
+input bool              InpSetBrokerHardSl     = true;  // Broker SL
+input bool              InpSetBrokerTp         = true;  // Broker TP
 
-input group "— 3. Take profit and hard stop —"
-input bool              InpEnableMoneyGuard  = true;  // Turn on money TP + breathing hard stop
-input double            InpTpPer001          = 2.0;   // Take profit in money, per 0.01 lot     (0.10 lot → 20)
-input double            InpSlPer001          = 2.0;   // 1R in money, per 0.01 lot               (warning zone)
-input double            InpBreathMultiplier  = 3.0;   // Hard close at this × 1R                (3 → 0.01 lot dies at -6)
-input bool              InpSetBrokerHardSl   = true;  // Also set broker SL at the hard close (if terminal dies)
-input bool              InpSetBrokerTp       = true;  // Also set broker TP at the take profit
+input group "5  Trades"
+input bool              InpEnableOneTrade      = true;  // Only 1 trade
 
-input group "— 4. One trade only —"
-input bool              InpEnableOneTrade    = true;  // Close a 2nd/3rd trade (stops scaling into losers)
+input group "6  Hours"
+input bool              InpEnableTimeAnalysis  = true;  // Show hour clock
+input bool              InpBlockLosingHours    = false; // Kill bad-hour trades
+input string            InpManualLosingHours   = "";    // Bad hours
+input string            InpForceSafeHours      = "";    // Good hours
 
-input group "— 5. Daily goal —"
-input bool              InpEnableDailyLock   = false;  // Turn on
-input double            InpDailyLockMoney    = 400.0;  // After today is up this much, block new trades  (0 = skip)
-input bool              InpDailyLockFlatten  = false;  // Also close the open trade when the goal hits
-input double            InpDailyMaxLoss      = 0.0;    // Flatten if today is down this much             (0 = skip)
+input group "7  Today"
+input bool              InpEnableDailyLock     = false;  // Stop after a win
+input double            InpDailyLockMoney      = 400.0;  // Win goal
+input bool              InpDailyLockFlatten    = false;  // Close trade at goal
+input double            InpDailyMaxLoss        = 0.0;    // Max loss (0=off)
 
-input group "— 6. Protect starting balance —"
-input bool              InpEnableDailyFloor  = false;  // Turn on
-input double            InpDailyStartBalance = 600.0;  // Today's seed, e.g. 600 or 6000
-input double            InpDailyFloorArmPct    = 5.0;  // Stay off until equity has reached seed + this %   (600→630)
-input double            InpDailyFloorBufferPct = 3.0;  // Then flatten if equity falls to seed + this %     (600→618)
+input group "8  Start money"
+input bool              InpEnableDailyFloor    = false;  // Protect start money
+input double            InpDailyStartBalance   = 600.0;  // I started with
+input double            InpDailyFloorArmPct    = 5.0;    // Wait until up %
+input double            InpDailyFloorBufferPct = 3.0;    // Close if only up %
 
-input group "— Advanced (leave alone unless you need it) —"
-input ENUM_DP_SCOPE     InpManageScope       = DP_SCOPE_CHART_SYMBOL; // Watch this chart or the whole account
-input ENUM_DP_SCOPE     InpOneTradeScope     = DP_SCOPE_CHART_SYMBOL; // One-trade rule: this chart or whole account
-input long              InpMagicFilter       = -1;     // -1 = every trade, 0 = manual only
-input bool              InpEnforceOnStart    = true;   // Apply rules to trades already open when I attach
-input int               InpSlippagePoints    = 40;     // Close slippage (points)
-input int               InpLogLevel          = 1;      // Journal: 0 = errors, 1 = closes, 2 = everything
-input int               InpOffsetX           = 12;     // Panel gap from the side
-input int               InpOffsetY           = 12;     // Panel gap from the top/bottom
-input int               InpPanelWidth        = 380;    // Panel width
-input int               InpFontSize          = 12;     // Panel text size
-input double            InpPanelScale        = 1.0;    // Panel size multiplier
-input int               InpRightClearance    = 58;     // Extra gap so the panel misses the price scale
-input int               InpBottomClearance   = 22;     // Extra gap so the panel misses the status bar
-input int               InpHistoryDays       = 90;     // Clock: days of history
-input int               InpMinTradesPerHour  = 8;      // Clock: min trades before an hour counts as losing
-input double            InpLosingWinRatePct  = 50.0;   // Clock: losing if win rate is below this %
-input bool              InpLoseOnNegativeNet = true;   // Clock: also losing if that hour's net is negative
-input ENUM_DP_TIMEBASE  InpTimeBase          = DP_TIME_SERVER; // Clock: whose clock
-input int               InpUtcOffsetHours    = 0;      // Clock: extra hours if "UTC + offset"
-input double            InpLotUnit           = 0.01;   // Lot step to count (keep 0.01)
-input ENUM_DP_LOT_REF   InpLotReference      = DP_LOT_BALANCE; // Lot cap uses balance or equity
-input int               InpAmberMaxSeconds   = 0;      // Close if stuck between 1R and hard stop this many seconds (0 = off)
-input bool              InpEnableProfitLock  = false;  // After a run-up, raise the hard stop
-input double            InpLockTriggerPct    = 80.0;   // Raise it when peak profit is this % of TP
-input double            InpLockToR           = 0.0;    // New floor in R (0 = breakeven)
+input group "9  Extra"
+input ENUM_DP_SCOPE     InpManageScope         = DP_SCOPE_CHART_SYMBOL; // Watch
+input ENUM_DP_SCOPE     InpOneTradeScope       = DP_SCOPE_CHART_SYMBOL; // One-trade on
+input long              InpMagicFilter         = -1;     // Which trades (-1=all  0=manual)
+input bool              InpEnforceOnStart      = true;   // Fix trades already open
+input int               InpSlippagePoints      = 40;     // Slippage
+input int               InpLogLevel            = 1;      // Log 0/1/2
+input int               InpOffsetX             = 12;     // Panel side gap
+input int               InpOffsetY             = 12;     // Panel top gap
+input int               InpPanelWidth          = 380;    // Panel width
+input int               InpFontSize            = 12;     // Text size
+input double            InpPanelScale          = 1.0;    // Panel scale
+input int               InpRightClearance      = 58;     // Right gap
+input int               InpBottomClearance     = 22;     // Bottom gap
+input int               InpHistoryDays         = 90;     // Clock days
+input int               InpMinTradesPerHour    = 8;      // Min trades / hour
+input double            InpLosingWinRatePct    = 50.0;   // Bad hour if win % below
+input bool              InpLoseOnNegativeNet   = true;   // Bad hour if net < 0
+input ENUM_DP_TIMEBASE  InpTimeBase            = DP_TIME_SERVER; // Clock time
+input int               InpUtcOffsetHours      = 0;      // UTC extra hours
+input double            InpLotUnit             = 0.01;   // Lot step
+input ENUM_DP_LOT_REF   InpLotReference        = DP_LOT_BALANCE; // Lots from
+input int               InpAmberMaxSeconds     = 0;      // Stuck seconds (0=off)
+input bool              InpEnableProfitLock    = false;  // Lock profit
+input double            InpLockTriggerPct      = 80.0;   // Lock at % of TP
+input double            InpLockToR             = 0.0;    // Lock to (0=even)
 
 //+------------------------------------------------------------------+
 CDomEngine g_engine;
