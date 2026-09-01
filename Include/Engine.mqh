@@ -105,6 +105,13 @@ private:
    void              RebuildAtlBaskets(void);
    bool              InAtlBasket(const string symbol, const ENUM_POSITION_TYPE type) const;
    double            AtlBeTarget(void) const;
+   double            AtlBasketBePrice(const SAtlBasket &b) const;
+   string            AtlBeObjName(const ENUM_POSITION_TYPE type, const bool label) const;
+   void              AtlBePutLine(const ENUM_POSITION_TYPE type, const double price,
+                                  const string caption);
+   void              AtlBeDropLine(const ENUM_POSITION_TYPE type);
+   void              AtlBeLineDelete(void);
+   void              SyncAtlBeLine(void);
    void              AtlEnqueueBasket(const SAtlBasket &b, const string detail);
    bool              AtlBlockedAdds(void) const;
    bool              PolicyBlockNew(void) const;
@@ -1177,6 +1184,7 @@ void CDomEngine::Work(void)
       PruneState();
       RefreshDaily();
      }
+   SyncAtlBeLine();
   }
 
 void CDomEngine::Pulse(void)
@@ -1322,6 +1330,7 @@ bool CDomEngine::Init(const SDpConfig &cfg)
 void CDomEngine::Deinit(const int reason)
   {
    EventKillTimer();
+   AtlBeLineDelete();
    m_dash.Deinit();
    if(reason == REASON_CHARTCLOSE || reason == REASON_REMOVE ||
       reason == REASON_RECOMPILE || reason == REASON_CLOSE ||

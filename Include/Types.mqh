@@ -16,6 +16,7 @@
 #define DP_DOW_COUNT             7
 #define DP_GV_OWNER_PREFIX       "DomPanion.owner."
 #define DP_OBJ_CANVAS            "DomPanion.canvas"
+#define DP_OBJ_ATL_BE            "DomPanion.atl.be"
 #define DP_TIMER_MS              250
 #define DP_VOLUME_EPS            0.0000001
 #define DP_MONEY_EPS             0.005
@@ -287,6 +288,7 @@ struct SAtlBasket
    double            pnl;
    int               nextMult;
    double            nextPrice;
+   double            bePrice;               // lot-weighted money BE of open legs
    ulong             pendingTicket;
   };
 

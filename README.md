@@ -43,7 +43,7 @@ The compiled `.ex5` is standalone. `Include/` is only needed at compile time.
 4. **Scale-in block** — If one position is open, a 2nd/3rd is closed (hedging). On netting, an add is cut back to the previous volume. Matching pending orders are deleted. Same-way adds are kept if **add to losers** is on.
 5. **Daily goal lock (optional)** — After today’s P/L hits a money target (e.g. 400), new trades are blocked. Optional flatten. Optional daily max loss.
 6. **Daily start floor (optional)** — You set a seed for the day (e.g. 600). If **account equity** comes within a buffer of that seed (default 3% → trigger at 618), every **watched** trade is closed and any new watched trade is closed for the rest of the broker day. The lock resets at midnight; the seed value stays what you configured. Floor uses account equity; if you need every symbol covered, set **Watch** to Whole account.
-7. **Add to losers (optional, off)** — After you add a second same-way trade, the EA keeps adding at 2×/3×/4× that gap and closes the basket at break-even + extra % of balance.
+7. **Add to losers (optional, off)** — After you add a second same-way trade, the EA keeps adding at 2×/3×/4× that gap and closes the basket at break-even + extra % of balance. While the grid is live, a dashed line on this chart marks combined **break-even** (lot-weighted, swap and commission included). It moves when a leg is added and is removed when the basket is closed.
 
 ## How it works
 
@@ -87,7 +87,7 @@ MT5 → Inputs. Ten groups. Read the left column; the right column is the value.
 
 Example for start money `600`: wait until up `5` (630), then close if only up `3` (618). Wait % must be bigger than close %.
 
-**Add to losers:** You open a trade, it goes against you, you add a second the same way. Gap is locked. Further adds at 2×, 3×, 4×… of that gap. Combined profit ≥ extra % of balance → close the basket.
+**Add to losers:** You open a trade, it goes against you, you add a second the same way. Gap is locked. Further adds at 2×, 3×, 4×… of that gap. Combined profit ≥ extra % of balance → close the basket. The orange dashed **ATL BE** line is the price where the current lots (not the pending next add) are even.
 
 How the rules stack (highest first):
 
@@ -101,7 +101,7 @@ How the rules stack (highest first):
 
 Off by default. High risk. Demo first.
 
-## Live (v1.23)
+## Live (v1.24)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
@@ -111,7 +111,7 @@ This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, co
 4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
 5. **Add to losers** is off. Turn it on only if you understand the grid. **Only 1 trade** can stay on; same-direction adds are allowed, extras the other way are not.
 
-v1.23 audit: start-floor flatten now respects **Watch** (chart vs whole account); a failed scale-in close no longer kills the original ticket; max-trades `2` means no auto add; same-way 2-stack no longer skips losing-hour unless it is an add-to-losers basket; lot cap still applies to pendings when the grid is on.
+v1.24: add-to-losers draws a dashed **ATL BE** line on the chart at lot-weighted break-even; it updates when you add and disappears when the basket is gone.
 
 ## License
 

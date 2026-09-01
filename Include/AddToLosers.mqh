@@ -129,6 +129,7 @@ void CDomEngine::RebuildAtlBaskets(void)
          m_atl[slot].pendingTicket = 0;
          m_atl[slot].nextMult = 0;
          m_atl[slot].nextPrice = 0.0;
+         m_atl[slot].bePrice = 0.0;
          m_atl[slot].pnl = 0.0;
          m_atl[slot].step = 0.0;
          m_atl[slot].firstPrice = 0.0;
@@ -174,6 +175,7 @@ void CDomEngine::RebuildAtlBaskets(void)
          tick = SymbolInfoDouble(basket.symbol, SYMBOL_POINT);
       bool ok = (legs >= 2 && basket.step >= tick * 2.0);
       basket.active = ok;
+      basket.bePrice = (ok ? AtlBasketBePrice(basket) : 0.0);
 
       basket.nextMult  = 0;
       basket.nextPrice = 0.0;
@@ -228,6 +230,170 @@ double CDomEngine::AtlBeTarget(void) const
    if(t < 0.10)
       t = 0.10;
    return t;
+  }
+
+double CDomEngine::AtlBasketBePrice(const SAtlBasket &b) const
+  {
+   if(b.n <= 0)
+      return 0.0;
+
+   double volSum = 0.0;
+   double pxVol  = 0.0;
+   double extra  = 0.0;
+   for(int i = 0; i < b.n; i++)
+     {
+      int k = b.idx[i];
+      if(k < 0 || k >= m_posN)
+         continue;
+      volSum += m_pos[k].volume;
+      pxVol  += m_pos[k].priceOpen * m_pos[k].volume;
+      extra  += m_pos[k].swap + m_pos[k].commission;
+     }
+   if(volSum <= DP_VOLUME_EPS)
+      return 0.0;
+
+   double vwap = pxVol / volSum;
+   double be   = vwap;
+   if(MathAbs(extra) >= DP_MONEY_EPS)
+     {
+      double px = 0.0;
+      if(DpPriceForMoney(b.symbol, b.type, volSum, vwap, -extra, px) && px > 0.0)
+         be = px;
+     }
+   return DpNormPrice(b.symbol, be);
+  }
+
+string CDomEngine::AtlBeObjName(const ENUM_POSITION_TYPE type, const bool label) const
+  {
+   string s = DP_OBJ_ATL_BE;
+   s += (label ? ".lbl." : ".");
+   s += (type == POSITION_TYPE_BUY ? "buy." : "sell.");
+   s += IntegerToString(m_cfg.chartId);
+   return s;
+  }
+
+void CDomEngine::AtlBeDropLine(const ENUM_POSITION_TYPE type)
+  {
+   long id = m_cfg.chartId;
+   ObjectDelete(id, AtlBeObjName(type, false));
+   ObjectDelete(id, AtlBeObjName(type, true));
+  }
+
+void CDomEngine::AtlBeLineDelete(void)
+  {
+   AtlBeDropLine(POSITION_TYPE_BUY);
+   AtlBeDropLine(POSITION_TYPE_SELL);
+  }
+
+void CDomEngine::AtlBePutLine(const ENUM_POSITION_TYPE type, const double price,
+                              const string caption)
+  {
+   long id = m_cfg.chartId;
+   if(id <= 0 || price <= 0.0)
+      return;
+
+   string nLine = AtlBeObjName(type, false);
+   string nLbl  = AtlBeObjName(type, true);
+   color  clr   = (m_cfg.theme == DP_THEME_LIGHT ? C'180,90,0' : C'243,156,18');
+
+   if(ObjectFind(id, nLine) < 0)
+     {
+      if(!ObjectCreate(id, nLine, OBJ_HLINE, 0, 0, price))
+         return;
+      ObjectSetInteger(id, nLine, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(id, nLine, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(id, nLine, OBJPROP_BACK, false);
+      ObjectSetInteger(id, nLine, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(id, nLine, OBJPROP_STYLE, STYLE_DASH);
+      ObjectSetInteger(id, nLine, OBJPROP_COLOR, clr);
+     }
+   else
+     {
+      ObjectMove(id, nLine, 0, 0, price);
+      ObjectSetInteger(id, nLine, OBJPROP_COLOR, clr);
+     }
+   ObjectSetString(id, nLine, OBJPROP_TOOLTIP, caption);
+
+   datetime t = iTime(m_cfg.symbol, PERIOD_CURRENT, 0);
+   if(t <= 0)
+      t = TimeCurrent();
+
+   if(ObjectFind(id, nLbl) < 0)
+     {
+      if(!ObjectCreate(id, nLbl, OBJ_TEXT, 0, t, price))
+         return;
+      ObjectSetInteger(id, nLbl, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(id, nLbl, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(id, nLbl, OBJPROP_BACK, false);
+      ObjectSetInteger(id, nLbl, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
+      ObjectSetInteger(id, nLbl, OBJPROP_FONTSIZE, 8);
+      ObjectSetString(id, nLbl, OBJPROP_FONT, "Arial");
+     }
+   ObjectMove(id, nLbl, 0, t, price);
+   ObjectSetInteger(id, nLbl, OBJPROP_COLOR, clr);
+   ObjectSetString(id, nLbl, OBJPROP_TEXT, caption);
+  }
+
+void CDomEngine::SyncAtlBeLine(void)
+  {
+   if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE))
+      return;
+
+   bool   wantBuy  = false;
+   bool   wantSell = false;
+   double beBuy    = 0.0;
+   double beSell   = 0.0;
+
+   if(m_cfg.enableAtl)
+     {
+      for(int b = 0; b < m_atlN; b++)
+        {
+         if(!m_atl[b].active)
+            continue;
+         if(m_atl[b].symbol != m_cfg.symbol)
+            continue;
+         double px = m_atl[b].bePrice;
+         if(px <= 0.0)
+            px = AtlBasketBePrice(m_atl[b]);
+         if(px <= 0.0)
+            continue;
+         if(m_atl[b].type == POSITION_TYPE_BUY)
+           {
+            wantBuy = true;
+            beBuy   = px;
+           }
+         else
+           {
+            wantSell = true;
+            beSell   = px;
+           }
+        }
+     }
+
+   int sides = (wantBuy ? 1 : 0) + (wantSell ? 1 : 0);
+   int digits = (int)SymbolInfoInteger(m_cfg.symbol, SYMBOL_DIGITS);
+   if(digits < 0)
+      digits = 5;
+
+   if(wantBuy)
+     {
+      string cap = (sides > 1 ? "ATL BE BUY  " : "ATL BE  ")
+                   + DoubleToString(beBuy, digits);
+      AtlBePutLine(POSITION_TYPE_BUY, beBuy, cap);
+     }
+   else
+      AtlBeDropLine(POSITION_TYPE_BUY);
+
+   if(wantSell)
+     {
+      string cap = (sides > 1 ? "ATL BE SELL  " : "ATL BE  ")
+                   + DoubleToString(beSell, digits);
+      AtlBePutLine(POSITION_TYPE_SELL, beSell, cap);
+     }
+   else
+      AtlBeDropLine(POSITION_TYPE_SELL);
+
+   ChartRedraw(m_cfg.chartId);
   }
 
 void CDomEngine::AtlEnqueueBasket(const SAtlBasket &b, const string detail)
