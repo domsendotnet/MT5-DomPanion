@@ -101,7 +101,7 @@ How the rules stack (highest first):
 
 Off by default. High risk. Demo first.
 
-## Live (v1.24)
+## Live (v1.25)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
@@ -111,7 +111,7 @@ This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, co
 4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
 5. **Add to losers** is off. Turn it on only if you understand the grid. **Only 1 trade** can stay on; same-direction adds are allowed, extras the other way are not.
 
-v1.24: add-to-losers draws a dashed **ATL BE** line on the chart at lot-weighted break-even; it updates when you add and disappears when the basket is gone.
+v1.25: ATL limit place no longer feeds the comment into expiration (the string-to-number compile warning). Dashed **ATL BE** line is still lot-weighted break-even of the live basket.
 
 ## License
 

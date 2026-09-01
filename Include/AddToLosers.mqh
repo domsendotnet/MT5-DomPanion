@@ -531,8 +531,8 @@ void CDomEngine::AtlPlaceNext(SAtlBasket &b)
      }
    else
      {
-      ok = buy ? m_trade.BuyLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, 0, cmt)
-               : m_trade.SellLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, 0, cmt);
+      ok = buy ? m_trade.BuyLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt)
+               : m_trade.SellLimit(vol, b.nextPrice, b.symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, cmt);
      }
    m_trade.SetExpertMagicNumber(0);
    m_atlLastPlaceMs = nowMs;
