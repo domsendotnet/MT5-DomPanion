@@ -560,6 +560,7 @@ void CDashboard::DrawPositions(const SViewModel &vm, const int x0, const int x1)
       if(p.zone == DP_ZONE_TARGET) zc = m_theme.green;
       if(p.zone == DP_ZONE_AMBER || p.zone == DP_ZONE_KILL) zc = m_theme.red;
       if(p.zone == DP_ZONE_LOCKED) zc = m_theme.amber;
+      if(p.zoneName == "BASKET") zc = m_theme.amber;
       string zs = p.zoneName;
       int zw = TextW(zs);
       Font(m_fsSm, true);
@@ -595,6 +596,20 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
                         : "off");
    color c2 = (g.lotOn ? m_theme.green : m_theme.muted);
 
+   bool stackOff = g.atlActive;
+   for(int a = 0; a < vm.posCount && !stackOff; a++)
+     {
+      for(int b = a + 1; b < vm.posCount; b++)
+        {
+         if(vm.positions[a].symbol == vm.positions[b].symbol &&
+            vm.positions[a].side == vm.positions[b].side)
+           {
+            stackOff = true;
+            break;
+           }
+        }
+     }
+
    string k3 = "Money";
    string v3;
    color  c3;
@@ -603,7 +618,7 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
       v3 = "off";
       c3 = m_theme.muted;
      }
-   else if(g.atlActive)
+   else if(stackOff)
      {
       v3 = "ON  basket exit (not per trade)";
       c3 = m_theme.amber;

@@ -84,7 +84,7 @@ private:
    bool              Grandfathered(const datetime timeOpen) const;
    int               CountSameDir(const string symbol, const ENUM_POSITION_TYPE type) const;
    bool              SameDirStack(const string symbol, const ENUM_POSITION_TYPE type) const;
-   void              StripStackedStops(void);
+   void              StripStackedStops(void); // 2+ tickets, or netting ATL (1 ticket, 2+ fills)
    void              RefreshDaily(void);
    void              EnqueueAccountFlatten(const ENUM_DP_REASON reason, const string detail);
    void              EvaluatePendings(void);
@@ -104,10 +104,7 @@ private:
    bool              AtlLevelFilled(const SAtlBasket &b, const double level);
    void              RebuildAtlBaskets(void);
    bool              InAtlBasket(const string symbol, const ENUM_POSITION_TYPE type) const;
-   bool              AtlSameDirOpen(const string symbol, const ENUM_POSITION_TYPE type) const;
-   bool              AtlHasMate(const int posIndex) const;
    double            AtlBeTarget(void) const;
-   void              AtlStripStops(const SAtlBasket &b);
    void              AtlEnqueueBasket(const SAtlBasket &b, const string detail);
    bool              AtlBlockedAdds(void) const;
    bool              PolicyBlockNew(void) const;
@@ -216,8 +213,8 @@ int CDomEngine::ReasonRank(const ENUM_DP_REASON r) const
      {
       case DP_REASON_DAILY_FLOOR:   return 110;
       case DP_REASON_DAILY_LOSS:    return 100;
-      case DP_REASON_ATL_BE:        return 85;
       case DP_REASON_HARD_STOP:     return 90;
+      case DP_REASON_ATL_BE:        return 85;
       case DP_REASON_AMBER_TIMEOUT: return 80;
       case DP_REASON_PROFIT_LOCK:   return 75;
       case DP_REASON_DAILY_LOCK:    return 70;
@@ -392,7 +389,9 @@ void CDomEngine::StripStackedStops(void)
       return;
    for(int i = 0; i < m_posN; i++)
      {
-      if(!SameDirStack(m_pos[i].symbol, m_pos[i].type))
+      // Hedging: 2+ same-way tickets. Netting ATL: one ticket, several fills.
+      if(!SameDirStack(m_pos[i].symbol, m_pos[i].type) &&
+         !InAtlBasket(m_pos[i].symbol, m_pos[i].type))
          continue;
       if(m_pos[i].sl == 0.0 && m_pos[i].tp == 0.0)
          continue;
@@ -566,34 +565,12 @@ void CDomEngine::RefreshDaily(void)
 
 void CDomEngine::EnqueueAccountFlatten(const ENUM_DP_REASON reason, const string detail)
   {
-   int total = PositionsTotal();
-   for(int i = 0; i < total; i++)
-     {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket == 0)
-         continue;
-      if(!PositionSelectByTicket(ticket))
-         continue;
-      if(!DpManageMagic(PositionGetInteger(POSITION_MAGIC), m_cfg))
-         continue;
-      Enqueue(ticket, false, 0.0, reason, detail);
-     }
-
-   int orders = OrdersTotal();
-   for(int i = 0; i < orders; i++)
-     {
-      ulong ticket = OrderGetTicket(i);
-      if(ticket == 0)
-         continue;
-      if(!OrderSelect(ticket))
-         continue;
-      ENUM_ORDER_TYPE type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
-      if(type == ORDER_TYPE_BUY || type == ORDER_TYPE_SELL)
-         continue;
-      if(!DpManageMagic(OrderGetInteger(ORDER_MAGIC), m_cfg))
-         continue;
-      Enqueue(ticket, true, 0.0, reason, detail);
-     }
+   // Snapshots are already filtered by Watch (symbol) and magic.
+   // Do not walk PositionsTotal here — that ignored chart-only scope.
+   for(int i = 0; i < m_posN; i++)
+      Enqueue(m_pos[i].ticket, false, 0.0, reason, detail);
+   for(int i = 0; i < m_pendN; i++)
+      Enqueue(m_pend[i].ticket, true, 0.0, reason, detail);
   }
 
 void CDomEngine::EvaluatePendings(void)
@@ -633,36 +610,40 @@ void CDomEngine::EvaluatePendings(void)
          reason = DP_REASON_DAILY_LOCK;
          detail = "daily goal";
         }
-      else if(DpIsAtlPending(m_pend[i]))
+      else
         {
-         if(hourNowLosing)
+         bool atlPend = DpIsAtlPending(m_pend[i]);
+         ENUM_POSITION_TYPE ptype = DpPosTypeFromOrder(m_pend[i].type);
+         bool sameDirOpen = (CountSameDir(m_pend[i].symbol, ptype) > 0);
+
+         if(atlPend)
+           {
+            if(hourNowLosing)
+              {
+               reason = DP_REASON_LOSING_HOUR;
+               detail = "no ATL adds in a losing hour";
+              }
+           }
+         else if(m_cfg.enableOneTrade && posInScope && InOneTradeScope(m_pend[i].symbol) &&
+                 !(m_cfg.enableAtl && sameDirOpen))
+           {
+            reason = DP_REASON_PENDING;
+            detail = "position already open";
+           }
+         else if(hourNowLosing)
            {
             reason = DP_REASON_LOSING_HOUR;
-            detail = "no ATL adds in a losing hour";
+            detail = "current hour is a losing bucket";
            }
-         else
-            continue;
-        }
-      else if(m_cfg.enableAtl &&
-              AtlSameDirOpen(m_pend[i].symbol, DpPosTypeFromOrder(m_pend[i].type)))
-         continue;
-      else if(m_cfg.enableOneTrade && posInScope && InOneTradeScope(m_pend[i].symbol))
-        {
-         reason = DP_REASON_PENDING;
-         detail = "position already open";
-        }
-      else if(hourNowLosing)
-        {
-         reason = DP_REASON_LOSING_HOUR;
-         detail = "current hour is a losing bucket";
-        }
-      else if(m_cfg.enableLotGuard)
-        {
-         double maxLots = DpMaxLots(m_pend[i].symbol, money, m_cfg.balancePer001, m_cfg.lotUnit);
-         if(m_pend[i].volume > maxLots + DP_VOLUME_EPS)
+
+         if(reason == DP_REASON_NONE && m_cfg.enableLotGuard)
            {
-            reason = DP_REASON_LOT_CAP;
-            detail = "vol " + DpLots(m_pend[i].volume) + " > max " + DpLots(maxLots);
+            double maxLots = DpMaxLots(m_pend[i].symbol, money, m_cfg.balancePer001, m_cfg.lotUnit);
+            if(m_pend[i].volume > maxLots + DP_VOLUME_EPS)
+              {
+               reason = DP_REASON_LOT_CAP;
+               detail = "vol " + DpLots(m_pend[i].volume) + " > max " + DpLots(maxLots);
+              }
            }
         }
 
@@ -702,7 +683,8 @@ void CDomEngine::EvaluatePositions(void)
 
       bool gf = Grandfathered(snap.timeOpen);
       bool inStack = SameDirStack(snap.symbol, snap.type);
-      bool inGrid = InAtlBasket(snap.symbol, snap.type) || inStack;
+      bool inAtl   = InAtlBasket(snap.symbol, snap.type);
+      bool basket  = (inStack || inAtl);
       double tpMoney = 0.0, softMoney = 0.0, hardMoney = 0.0;
       DpMoneyBand(snap.volume, m_cfg, tpMoney, softMoney, hardMoney);
 
@@ -710,7 +692,7 @@ void CDomEngine::EvaluatePositions(void)
       if(m_cfg.enableProfitLock)
          lockFloor = m_cfg.lockToR * softMoney;
 
-      if(m_cfg.enableProfitLock && tpMoney > 0.0 &&
+      if(!basket && m_cfg.enableProfitLock && tpMoney > 0.0 &&
          m_st[si].peakProfit + DP_MONEY_EPS >= tpMoney * m_cfg.lockTriggerPct / 100.0)
          m_st[si].profitLocked = true;
 
@@ -729,7 +711,7 @@ void CDomEngine::EvaluatePositions(void)
          detail = "daily PnL " + DoubleToString(m_dailyPnl, 2);
         }
       else if(!gf && m_cfg.enableOneTrade && keeper >= 0 && i != keeper &&
-              InOneTradeScope(snap.symbol) && !AtlHasMate(i))
+              InOneTradeScope(snap.symbol) && !(m_cfg.enableAtl && inStack))
         {
          reason = DP_REASON_EXTRA_POS;
          detail = "keeper #" + IntegerToString((long)m_pos[keeper].ticket);
@@ -754,7 +736,7 @@ void CDomEngine::EvaluatePositions(void)
         }
 
       if(reason == DP_REASON_NONE && !gf && m_cfg.blockLosingHours &&
-         m_time.IsLosingEntry(snap.timeOpen) && !inGrid)
+         m_time.IsLosingEntry(snap.timeOpen) && !inAtl)
         {
          reason = DP_REASON_LOSING_HOUR;
          detail = "opened " + DpHourLabel(DpHourOf(snap.timeOpen, m_cfg)) + ":00";
@@ -764,7 +746,7 @@ void CDomEngine::EvaluatePositions(void)
         {
          bool flatten = m_cfg.dailyLockFlatten;
          bool isNew   = (snap.timeOpen >= m_dailyLockSince && m_dailyLockSince > 0);
-         if(flatten || (isNew && !inGrid))
+         if(flatten || (isNew && !inAtl))
            {
             reason = DP_REASON_DAILY_LOCK;
             detail = "daily " + DoubleToString(m_dailyPnl, 2)
@@ -772,8 +754,8 @@ void CDomEngine::EvaluatePositions(void)
            }
         }
 
-      // Money guard — skip individual TP/SL on an active add-to-losers basket.
-      if(reason == DP_REASON_NONE && m_cfg.enableMoneyGuard && !inGrid)
+      // Per-ticket money TP/SL: off on a 2+ same-way stack and on an ATL basket.
+      if(reason == DP_REASON_NONE && m_cfg.enableMoneyGuard && !basket)
         {
          ENUM_DP_ZONE zone = ZoneOf(snap.profitNet, softMoney, hardMoney, tpMoney,
                                     m_st[si].profitLocked, lockFloor);
@@ -818,7 +800,7 @@ void CDomEngine::EvaluatePositions(void)
       if(reason != DP_REASON_NONE)
          Enqueue(snap.ticket, false, closeVol, reason, detail);
 
-      ApplyMoneyAndStops(i, reason != DP_REASON_NONE || inStack);
+      ApplyMoneyAndStops(i, reason != DP_REASON_NONE || basket);
      }
   }
 
@@ -910,7 +892,9 @@ bool CDomEngine::ExecuteClose(SCloseReq &req)
    if(!full)
      {
       part = DpNormalizeVolume(symbol, req.volume);
-      if(part <= DP_VOLUME_EPS || part + DP_VOLUME_EPS >= vol)
+      if(part <= DP_VOLUME_EPS)
+         return false; // scale-in slice too small — never promote to a full close
+      if(part + DP_VOLUME_EPS >= vol)
          full = true;
      }
 
@@ -1007,7 +991,10 @@ void CDomEngine::ProcessQueue(void)
 
       if(rc == TRADE_RETCODE_INVALID_CLOSE_VOLUME && m_q[i].volume > DP_VOLUME_EPS)
         {
-         m_q[i].volume = 0.0;
+         // Lot-cap / extra can retry as a full close. Scale-in must not:
+         // that would kill the original ticket, not just the add.
+         if(m_q[i].reason != DP_REASON_SCALE_IN)
+            m_q[i].volume = 0.0;
          continue;
         }
 
@@ -1095,6 +1082,8 @@ void CDomEngine::BuildView(void)
       v.zone = ZoneOf(snap.profitNet, v.softSlMoney, v.hardSlMoney, v.tpMoney,
                       v.profitLocked, lockFloor);
       v.zoneName = DpZoneName(v.zone);
+      if(SameDirStack(snap.symbol, snap.type) || InAtlBasket(snap.symbol, snap.type))
+         v.zoneName = "BASKET";
       v.amberLeftSec = -1;
       if(si >= 0 && m_st[si].amberSince > 0 && m_cfg.amberMaxSeconds > 0)
         {
@@ -1360,6 +1349,13 @@ void CDomEngine::OnTradeTransaction(const MqlTradeTransaction &trans)
       trans.type == TRADE_TRANSACTION_ORDER_DELETE ||
       trans.type == TRADE_TRANSACTION_HISTORY_ADD)
      {
+      // PositionClose / Place fire this reentrantly. Do not HistorySelect
+      // (overwrites the deal cache) or nest Work; Pulse() will replay once.
+      if(m_inPulse)
+        {
+         m_needReplay = true;
+         return;
+        }
       m_time.Rebuild(true);
       Pulse();
      }

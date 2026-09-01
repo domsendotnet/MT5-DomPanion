@@ -179,9 +179,8 @@ void CDomEngine::RebuildAtlBaskets(void)
       basket.nextPrice = 0.0;
       if(ok)
         {
+         // max 2 = the two the user opened, no auto add (k starts at 2).
          int maxK = m_cfg.atlMaxTrades - 1;
-         if(maxK < 2)
-            maxK = 2;
          int dir = (basket.type == POSITION_TYPE_BUY ? -1 : 1);
          for(int k = 2; k <= maxK; k++)
            {
@@ -222,33 +221,6 @@ bool CDomEngine::InAtlBasket(const string symbol, const ENUM_POSITION_TYPE type)
    return false;
   }
 
-bool CDomEngine::AtlSameDirOpen(const string symbol, const ENUM_POSITION_TYPE type) const
-  {
-   if(!m_cfg.enableAtl)
-      return false;
-   for(int i = 0; i < m_posN; i++)
-     {
-      if(m_pos[i].symbol == symbol && m_pos[i].type == type)
-         return true;
-     }
-   return false;
-  }
-
-bool CDomEngine::AtlHasMate(const int posIndex) const
-  {
-   if(!m_cfg.enableAtl || posIndex < 0 || posIndex >= m_posN)
-      return false;
-   for(int j = 0; j < m_posN; j++)
-     {
-      if(j == posIndex)
-         continue;
-      if(m_pos[j].symbol == m_pos[posIndex].symbol &&
-         m_pos[j].type == m_pos[posIndex].type)
-         return true;
-     }
-   return false;
-  }
-
 double CDomEngine::AtlBeTarget(void) const
   {
    double bal = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -256,20 +228,6 @@ double CDomEngine::AtlBeTarget(void) const
    if(t < 0.10)
       t = 0.10;
    return t;
-  }
-
-void CDomEngine::AtlStripStops(const SAtlBasket &b)
-  {
-   if(m_cfg.dryRun)
-      return;
-   for(int i = 0; i < b.n; i++)
-     {
-      SPosSnap s = m_pos[b.idx[i]];
-      if(s.sl == 0.0 && s.tp == 0.0)
-         continue;
-      DpPrepareTrade(m_trade, s.symbol, m_cfg.slippagePoints);
-      m_trade.PositionModify(s.ticket, 0.0, 0.0);
-     }
   }
 
 void CDomEngine::AtlEnqueueBasket(const SAtlBasket &b, const string detail)
@@ -314,9 +272,9 @@ void CDomEngine::AtlCancelPendings(const string symbol, const ENUM_POSITION_TYPE
      {
       if(!DpIsAtlPending(m_pend[p]))
          continue;
-      if(symbol != "" && m_pend[p].symbol != symbol)
+      if(m_pend[p].symbol != symbol)
          continue;
-      if(symbol != "" && DpPosTypeFromOrder(m_pend[p].type) != type)
+      if(DpPosTypeFromOrder(m_pend[p].type) != type)
          continue;
       Enqueue(m_pend[p].ticket, true, 0.0, DP_REASON_PENDING, "ATL add blocked");
      }
@@ -324,7 +282,12 @@ void CDomEngine::AtlCancelPendings(const string symbol, const ENUM_POSITION_TYPE
 
 void CDomEngine::AtlCancelAllPendings(void)
   {
-   AtlCancelPendings("", POSITION_TYPE_BUY);
+   for(int p = 0; p < m_pendN; p++)
+     {
+      if(!DpIsAtlPending(m_pend[p]))
+         continue;
+      Enqueue(m_pend[p].ticket, true, 0.0, DP_REASON_PENDING, "ATL add blocked");
+     }
   }
 
 void CDomEngine::AtlPlaceNext(SAtlBasket &b)
@@ -446,7 +409,6 @@ void CDomEngine::RunAddToLosers(void)
          AtlEnqueueBasket(m_atl[b], det);
          continue;
         }
-      AtlStripStops(m_atl[b]);
       if(!blockAdds)
          AtlPlaceNext(m_atl[b]);
      }

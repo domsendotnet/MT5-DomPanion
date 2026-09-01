@@ -2,7 +2,7 @@
 
 Copyright © 2026 Dominik Fischer
 
-Companion Expert Advisor for MetaTrader 5. It does **not** open trades. It watches yours and closes anything that breaks the rules you set — lot size, extra positions, money TP/SL, losing hours, daily start-balance floor.
+Companion Expert Advisor for MetaTrader 5. It watches your trades and closes anything that breaks the rules you set — lot size, extra positions, money TP/SL, losing hours, daily start-balance floor. It does **not** open trades except the optional **add-to-losers** grid (after you have already placed a second same-way add).
 
 Built for high-leverage, low-balance discretionary trading: the pattern of making a few hundred / a few thousand and then giving it back by scaling into losers and oversizing.
 
@@ -40,9 +40,10 @@ The compiled `.ex5` is standalone. `Include/` is only needed at compile time.
 1. **Time intelligence** — Groups closed trades by **entry hour**. The CLOCK heatmap shows where you typically win and lose. Optional: immediately close anything opened in a losing hour.
 2. **Lot cap** — Example: 2000 account currency required per 0.01 lot. With 2300 on the account, 0.02 is closed at once.
 3. **Money TP / breathing SL** — Take-profit and stop are in money per 0.01, scaled by volume. A 3× breath multiplier lets a trade go 2–3× the target against you before it is killed. That is the room you use to recover, with a hard ceiling so one failure cannot wipe the account.
-4. **Scale-in block** — If one position is open, a 2nd/3rd is closed (hedging). On netting, an add is cut back to the previous volume. Matching pending orders are deleted.
+4. **Scale-in block** — If one position is open, a 2nd/3rd is closed (hedging). On netting, an add is cut back to the previous volume. Matching pending orders are deleted. Same-way adds are kept if **add to losers** is on.
 5. **Daily goal lock (optional)** — After today’s P/L hits a money target (e.g. 400), new trades are blocked. Optional flatten. Optional daily max loss.
-6. **Daily start floor (optional)** — You set a seed for the day (e.g. 600). If **account equity** comes within a buffer of that seed (default 3% → trigger at 618), every matching trade is closed and any new trade is closed for the rest of the broker day. The lock resets at midnight; the seed value stays what you configured.
+6. **Daily start floor (optional)** — You set a seed for the day (e.g. 600). If **account equity** comes within a buffer of that seed (default 3% → trigger at 618), every **watched** trade is closed and any new watched trade is closed for the rest of the broker day. The lock resets at midnight; the seed value stays what you configured. Floor uses account equity; if you need every symbol covered, set **Watch** to Whole account.
+7. **Add to losers (optional, off)** — After you add a second same-way trade, the EA keeps adding at 2×/3×/4× that gap and closes the basket at break-even + extra % of balance.
 
 ## How it works
 
@@ -69,7 +70,7 @@ As soon as a **second** same-way trade is open, SL and TP on those trades are re
 
 ## Settings
 
-MT5 → Inputs. Nine groups. Read the left column; the right column is the value.
+MT5 → Inputs. Ten groups. Read the left column; the right column is the value.
 
 | Group | What you set |
 |---|---|
@@ -90,7 +91,7 @@ Example for start money `600`: wait until up `5` (630), then close if only up `3
 
 How the rules stack (highest first):
 
-1. Start-money floor / daily max loss — flatten everything, including a grid.
+1. Start-money floor / daily max loss — flatten watched trades, including a grid.
 2. Add-to-losers BE — close that basket only.
 3. Daily win goal — if flatten is on, flatten everything; if not, keep the grid but **no new adds**.
 4. Bad hours — no new trades and no new grid adds; an already-running grid is left for BE or the floor.
@@ -100,7 +101,7 @@ How the rules stack (highest first):
 
 Off by default. High risk. Demo first.
 
-## Live (v1.22)
+## Live (v1.23)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
@@ -109,6 +110,8 @@ This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, co
 3. Lots, profit, and only-1-trade are already on.
 4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
 5. **Add to losers** is off. Turn it on only if you understand the grid. **Only 1 trade** can stay on; same-direction adds are allowed, extras the other way are not.
+
+v1.23 audit: start-floor flatten now respects **Watch** (chart vs whole account); a failed scale-in close no longer kills the original ticket; max-trades `2` means no auto add; same-way 2-stack no longer skips losing-hour unless it is an add-to-losers basket; lot cap still applies to pendings when the grid is on.
 
 ## License
 
