@@ -594,15 +594,43 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
    color c2 = (g.lotOn ? m_theme.green : m_theme.muted);
 
    string k3 = "Money";
-   string v3 = (g.moneyOn ? "ON  TP " + DoubleToString(g.tpPer001, 2)
-                            + " / 0.01   hard " + DoubleToString(g.hardMult, 1) + "x"
-                          : "off");
-   color c3 = (g.moneyOn ? m_theme.green : m_theme.muted);
+   string v3;
+   color  c3;
+   if(!g.moneyOn)
+     {
+      v3 = "off";
+      c3 = m_theme.muted;
+     }
+   else if(g.atlActive)
+     {
+      v3 = "ON  basket exit (not per trade)";
+      c3 = m_theme.amber;
+     }
+   else
+     {
+      v3 = "ON  TP " + DoubleToString(g.tpPer001, 2)
+           + " / 0.01   hard " + DoubleToString(g.hardMult, 1) + "x";
+      c3 = m_theme.green;
+     }
 
    string k4 = "Scale";
-   string v4 = (g.oneTradeOn ? "ON  keep 1  (open " + IntegerToString(g.openCount) + ")"
-                             : "off");
-   color c4 = (g.oneTradeOn ? m_theme.green : m_theme.muted);
+   string v4;
+   color  c4;
+   if(!g.oneTradeOn)
+     {
+      v4 = "off";
+      c4 = m_theme.muted;
+     }
+   else if(g.atlOverridesOne)
+     {
+      v4 = "ON  1 trade  (ATL same-way OK)";
+      c4 = m_theme.amber;
+     }
+   else
+     {
+      v4 = "ON  keep 1  (open " + IntegerToString(g.openCount) + ")";
+      c4 = m_theme.green;
+     }
 
    string k5 = "Daily";
    string v5;

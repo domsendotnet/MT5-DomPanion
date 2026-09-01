@@ -107,6 +107,9 @@ private:
    void              AtlStripStops(const SAtlBasket &b);
    void              AtlEnqueueBasket(const SAtlBasket &b, const string detail);
    bool              AtlBlockedAdds(void) const;
+   bool              PolicyBlockNew(void) const;
+   void              AtlCancelPendings(const string symbol, const ENUM_POSITION_TYPE type);
+   void              AtlCancelAllPendings(void);
    void              AtlPlaceNext(SAtlBasket &b);
    void              RunAddToLosers(void);
    void              AtlFillView(SGuardView &g) const;
@@ -590,7 +593,15 @@ void CDomEngine::EvaluatePendings(void)
          detail = "daily goal";
         }
       else if(DpIsAtlPending(m_pend[i]))
-         continue;
+        {
+         if(hourNowLosing)
+           {
+            reason = DP_REASON_LOSING_HOUR;
+            detail = "no ATL adds in a losing hour";
+           }
+         else
+            continue;
+        }
       else if(m_cfg.enableAtl &&
               AtlSameDirOpen(m_pend[i].symbol, DpPosTypeFromOrder(m_pend[i].type)))
          continue;
@@ -649,6 +660,7 @@ void CDomEngine::EvaluatePositions(void)
          continue;
 
       bool gf = Grandfathered(snap.timeOpen);
+      bool inGrid = InAtlBasket(snap.symbol, snap.type);
       double tpMoney = 0.0, softMoney = 0.0, hardMoney = 0.0;
       DpMoneyBand(snap.volume, m_cfg, tpMoney, softMoney, hardMoney);
 
@@ -689,7 +701,7 @@ void CDomEngine::EvaluatePositions(void)
          closeVol = snap.volume - m_st[si].lastVolume;
          detail = "delta " + DpLots(closeVol);
         }
-      else if(!gf && m_cfg.enableLotGuard && !InAtlBasket(snap.symbol, snap.type))
+      else if(!gf && m_cfg.enableLotGuard)
         {
          double maxLots = DpMaxLots(snap.symbol, money, m_cfg.balancePer001, m_cfg.lotUnit);
          if(snap.volume > maxLots + DP_VOLUME_EPS)
@@ -700,8 +712,7 @@ void CDomEngine::EvaluatePositions(void)
         }
 
       if(reason == DP_REASON_NONE && !gf && m_cfg.blockLosingHours &&
-         m_time.IsLosingEntry(snap.timeOpen) &&
-         !InAtlBasket(snap.symbol, snap.type))
+         m_time.IsLosingEntry(snap.timeOpen) && !inGrid)
         {
          reason = DP_REASON_LOSING_HOUR;
          detail = "opened " + DpHourLabel(DpHourOf(snap.timeOpen, m_cfg)) + ":00";
@@ -711,15 +722,13 @@ void CDomEngine::EvaluatePositions(void)
         {
          bool flatten = m_cfg.dailyLockFlatten;
          bool isNew   = (snap.timeOpen >= m_dailyLockSince && m_dailyLockSince > 0);
-         if(flatten || isNew)
+         if(flatten || (isNew && !inGrid))
            {
             reason = DP_REASON_DAILY_LOCK;
             detail = "daily " + DoubleToString(m_dailyPnl, 2)
                      + " / " + DoubleToString(m_cfg.dailyLockMoney, 2);
            }
         }
-
-      bool inGrid = InAtlBasket(snap.symbol, snap.type);
 
       // Money guard — skip individual TP/SL on an active add-to-losers basket.
       if(reason == DP_REASON_NONE && m_cfg.enableMoneyGuard && !inGrid)
@@ -1004,6 +1013,7 @@ void CDomEngine::BuildView(void)
    g.hardMult        = m_cfg.breathMultiplier;
    g.oneTradeOn      = m_cfg.enableOneTrade;
    g.openCount       = m_posN;
+   g.atlOverridesOne = (m_cfg.enableAtl && m_cfg.enableOneTrade);
    g.dailyOn         = m_cfg.enableDailyLock;
    g.dailyPnl        = m_dailyPnl;
    g.dailyTarget     = m_cfg.dailyLockMoney;

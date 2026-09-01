@@ -84,9 +84,21 @@ MT5 → Inputs. Nine groups. Read the left column; the right column is the value
 
 Example for start money `600`: wait until up `5` (630), then close if only up `3` (618). Wait % must be bigger than close %.
 
-**Add to losers:** You open a trade, it goes against you, you add a second in the same direction. DomPanion measures that gap. At 2×, 3×, 4×… of the gap (from the first price, still against you) it opens the next one. Same lot as your 2nd add unless you set **Lot per add**. When the **combined** profit of those trades is at least **Extra profit %** of account balance, it closes the lot. Per-trade TP/SL is off on that basket so one leg cannot take profit while the rest die. **Only 1 trade** still kills a 2nd trade in the *other* direction. Daily floor / max loss still flatten everything. Max trades includes your two manual ones. Off by default. High risk. Demo first.
+**Add to losers:** You open a trade, it goes against you, you add a second the same way. Gap is locked. Further adds at 2×, 3×, 4×… of that gap. Combined profit ≥ extra % of balance → close the basket.
 
-## Live (v1.20)
+How the rules stack (highest first):
+
+1. Start-money floor / daily max loss — flatten everything, including a grid.
+2. Add-to-losers BE — close that basket only.
+3. Daily win goal — if flatten is on, flatten everything; if not, keep the grid but **no new adds**.
+4. Bad hours — no new trades and no new grid adds; an already-running grid is left for BE or the floor.
+5. Lot cap — a **single** ticket bigger than max is always closed; the grid will not add if total size would exceed max.
+6. Only 1 trade — still kills the other direction / other symbols. Same-way adds are allowed while add-to-losers is on.
+7. Money TP/SL — normal on a single trade. Off on an active grid (the basket exit is the TP).
+
+Off by default. High risk. Demo first.
+
+## Live (v1.21)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 

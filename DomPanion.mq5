@@ -11,7 +11,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Dominik Fischer"
 #property link        "https://github.com/domsendotnet/MT5-DomPanion"
-#property version     "1.20"
+#property version     "1.21"
 #property description "DomPanion — clock, lot cap, money TP/SL, one-trade, start floor, add-to-losers."
 #property description "Does not open trades. Attach to the chart you trade."
 

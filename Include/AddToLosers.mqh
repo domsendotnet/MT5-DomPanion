@@ -288,7 +288,7 @@ void CDomEngine::AtlEnqueueBasket(const SAtlBasket &b, const string detail)
      }
   }
 
-bool CDomEngine::AtlBlockedAdds(void) const
+bool CDomEngine::PolicyBlockNew(void) const
   {
    if(m_dailyFloorSticky || m_dailyLossSticky)
       return true;
@@ -296,9 +296,35 @@ bool CDomEngine::AtlBlockedAdds(void) const
       return true;
    if(m_cfg.blockLosingHours && m_time.IsLosingHour(m_report.currentHour))
       return true;
+   return false;
+  }
+
+bool CDomEngine::AtlBlockedAdds(void) const
+  {
+   if(PolicyBlockNew())
+      return true;
    if(!m_cfg.dryRun && !DpTradeAllowed())
       return true;
    return false;
+  }
+
+void CDomEngine::AtlCancelPendings(const string symbol, const ENUM_POSITION_TYPE type)
+  {
+   for(int p = 0; p < m_pendN; p++)
+     {
+      if(!DpIsAtlPending(m_pend[p]))
+         continue;
+      if(symbol != "" && m_pend[p].symbol != symbol)
+         continue;
+      if(symbol != "" && DpPosTypeFromOrder(m_pend[p].type) != type)
+         continue;
+      Enqueue(m_pend[p].ticket, true, 0.0, DP_REASON_PENDING, "ATL add blocked");
+     }
+  }
+
+void CDomEngine::AtlCancelAllPendings(void)
+  {
+   AtlCancelPendings("", POSITION_TYPE_BUY);
   }
 
 void CDomEngine::AtlPlaceNext(SAtlBasket &b)
@@ -396,13 +422,23 @@ void CDomEngine::AtlPlaceNext(SAtlBasket &b)
 void CDomEngine::RunAddToLosers(void)
   {
    if(!m_cfg.enableAtl)
+     {
+      AtlCancelAllPendings();
       return;
+     }
+
+   bool blockAdds = AtlBlockedAdds();
+   if(blockAdds)
+      AtlCancelAllPendings();
 
    double target = AtlBeTarget();
    for(int b = 0; b < m_atlN; b++)
      {
       if(!m_atl[b].active)
+        {
+         AtlCancelPendings(m_atl[b].symbol, m_atl[b].type);
          continue;
+        }
       if(m_atl[b].pnl + DP_MONEY_EPS >= target)
         {
          string det = "basket " + DoubleToString(m_atl[b].pnl, 2)
@@ -411,7 +447,8 @@ void CDomEngine::RunAddToLosers(void)
          continue;
         }
       AtlStripStops(m_atl[b]);
-      AtlPlaceNext(m_atl[b]);
+      if(!blockAdds)
+         AtlPlaceNext(m_atl[b]);
      }
   }
 

@@ -314,6 +314,7 @@ struct SGuardView
    double            tpPer001;
    double            hardMult;
    bool              oneTradeOn;
+   bool              atlOverridesOne;
    int               openCount;
    bool              dailyOn;
    double            dailyPnl;
