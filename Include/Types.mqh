@@ -18,6 +18,9 @@
 #define DP_TIMER_MS              250
 #define DP_VOLUME_EPS            0.0000001
 #define DP_MONEY_EPS             0.005
+#define DP_ATL_MAGIC             260601
+#define DP_ATL_COMMENT           "DP-ATL"
+#define DP_MAX_ATL_BASKETS       8
 
 enum ENUM_DP_CORNER
   {
@@ -77,7 +80,8 @@ enum ENUM_DP_REASON
    DP_REASON_DAILY_LOCK    = 9,
    DP_REASON_DAILY_LOSS    = 10,
    DP_REASON_PENDING       = 11,
-   DP_REASON_DAILY_FLOOR   = 12
+   DP_REASON_DAILY_FLOOR   = 12,
+   DP_REASON_ATL_BE        = 13
   };
 
 //+------------------------------------------------------------------+
@@ -145,6 +149,11 @@ struct SDpConfig
    double            dailyStartBalance;
    double            dailyFloorBufferPct;
    double            dailyFloorArmPct;
+
+   bool              enableAtl;
+   double            atlBePlusPct;
+   int               atlMaxTrades;
+   double            atlLot;
 
    bool              alertOnClose;
    bool              notifyOnClose;
@@ -217,6 +226,8 @@ struct SPendingSnap
    double            volume;
    datetime          timeSetup;
    long              magic;
+   double            priceOpen;
+   string            comment;
   };
 
 // Per-ticket memory that survives ticks (MAE, amber clock, volume, broker stops).
@@ -252,6 +263,22 @@ struct SAction
    datetime          t;
    ENUM_DP_REASON    reason;
    string            text;
+  };
+
+struct SAtlBasket
+  {
+   bool              active;
+   string            symbol;
+   ENUM_POSITION_TYPE type;
+   int               idx[DP_MAX_POSITIONS];
+   int               n;
+   double            firstPrice;
+   double            step;
+   double            addVolume;
+   double            pnl;
+   int               nextMult;
+   double            nextPrice;
+   ulong             pendingTicket;
   };
 
 //+------------------------------------------------------------------+
@@ -299,6 +326,14 @@ struct SGuardView
    double            dailyFloorArmLevel;
    bool              dailyFloorArmed;
    bool              dailyFloorHit;
+   bool              atlOn;
+   bool              atlActive;
+   int               atlLegs;
+   int               atlNextMult;
+   double            atlBasketPnl;
+   double            atlBeTarget;
+   double            atlNextPrice;
+   string            atlStatus;
    bool              dryRun;
    bool              armed;
    bool              ownerConflict;
@@ -340,6 +375,7 @@ string DpReasonText(const ENUM_DP_REASON reason)
       case DP_REASON_DAILY_LOSS:    return "daily loss cap";
       case DP_REASON_PENDING:       return "pending blocked";
       case DP_REASON_DAILY_FLOOR:   return "daily start floor";
+      case DP_REASON_ATL_BE:        return "add-to-losers BE";
       default:                      return "none";
      }
   }

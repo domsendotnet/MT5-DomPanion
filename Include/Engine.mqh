@@ -58,6 +58,9 @@ private:
    int               m_notedN;
    ulong             m_dead[DP_MAX_CLOSE_QUEUE];
    int               m_deadN;
+   SAtlBasket        m_atl[DP_MAX_ATL_BASKETS];
+   int               m_atlN;
+   uint              m_atlLastPlaceMs;
 
    void              ResetRuntime(void);
    bool              NoteOnce(const ulong ticket);
@@ -92,6 +95,21 @@ private:
    void              BuildView(void);
    void              Render(const bool force);
    void              Work(void);
+   void              AtlSortBasket(SAtlBasket &b);
+   bool              AtlFromDeals(const SPosSnap &p, double &first, double &step,
+                                  double &addVol, int &legs);
+   bool              AtlLevelFilled(const SAtlBasket &b, const double level);
+   void              RebuildAtlBaskets(void);
+   bool              InAtlBasket(const string symbol, const ENUM_POSITION_TYPE type) const;
+   bool              AtlSameDirOpen(const string symbol, const ENUM_POSITION_TYPE type) const;
+   bool              AtlHasMate(const int posIndex) const;
+   double            AtlBeTarget(void) const;
+   void              AtlStripStops(const SAtlBasket &b);
+   void              AtlEnqueueBasket(const SAtlBasket &b, const string detail);
+   bool              AtlBlockedAdds(void) const;
+   void              AtlPlaceNext(SAtlBasket &b);
+   void              RunAddToLosers(void);
+   void              AtlFillView(SGuardView &g) const;
 
 public:
                      CDomEngine(void);
@@ -113,6 +131,8 @@ CDomEngine::CDomEngine(void)
 void CDomEngine::ResetRuntime(void)
   {
    m_posN = m_pendN = m_stN = m_qN = m_actionN = m_notedN = m_deadN = 0;
+   m_atlN = 0;
+   m_atlLastPlaceMs = 0;
    m_inPulse = m_needReplay = m_armed = m_ownerConflict = false;
    m_initTime = 0;
    m_dayStamp = 0;
@@ -190,6 +210,7 @@ int CDomEngine::ReasonRank(const ENUM_DP_REASON r) const
      {
       case DP_REASON_DAILY_FLOOR:   return 110;
       case DP_REASON_DAILY_LOSS:    return 100;
+      case DP_REASON_ATL_BE:        return 85;
       case DP_REASON_HARD_STOP:     return 90;
       case DP_REASON_AMBER_TIMEOUT: return 80;
       case DP_REASON_PROFIT_LOCK:   return 75;
@@ -440,6 +461,8 @@ void CDomEngine::SnapshotPendings(void)
       p.volume    = OrderGetDouble(ORDER_VOLUME_CURRENT);
       p.timeSetup = (datetime)OrderGetInteger(ORDER_TIME_SETUP);
       p.magic     = magic;
+      p.priceOpen = OrderGetDouble(ORDER_PRICE_OPEN);
+      p.comment   = OrderGetString(ORDER_COMMENT);
       m_pend[m_pendN++] = p;
      }
   }
@@ -566,6 +589,11 @@ void CDomEngine::EvaluatePendings(void)
          reason = DP_REASON_DAILY_LOCK;
          detail = "daily goal";
         }
+      else if(DpIsAtlPending(m_pend[i]))
+         continue;
+      else if(m_cfg.enableAtl &&
+              AtlSameDirOpen(m_pend[i].symbol, DpPosTypeFromOrder(m_pend[i].type)))
+         continue;
       else if(m_cfg.enableOneTrade && posInScope && InOneTradeScope(m_pend[i].symbol))
         {
          reason = DP_REASON_PENDING;
@@ -647,20 +675,21 @@ void CDomEngine::EvaluatePositions(void)
          detail = "daily PnL " + DoubleToString(m_dailyPnl, 2);
         }
       else if(!gf && m_cfg.enableOneTrade && keeper >= 0 && i != keeper &&
-              InOneTradeScope(snap.symbol))
+              InOneTradeScope(snap.symbol) && !AtlHasMate(i))
         {
          reason = DP_REASON_EXTRA_POS;
          detail = "keeper #" + IntegerToString((long)m_pos[keeper].ticket);
         }
       else if(!gf && m_cfg.enableOneTrade && InOneTradeScope(snap.symbol) &&
               m_st[si].lastVolume > DP_VOLUME_EPS &&
-              snap.volume > m_st[si].lastVolume + DP_VOLUME_EPS)
+              snap.volume > m_st[si].lastVolume + DP_VOLUME_EPS &&
+              !m_cfg.enableAtl)
         {
          reason = DP_REASON_SCALE_IN;
          closeVol = snap.volume - m_st[si].lastVolume;
          detail = "delta " + DpLots(closeVol);
         }
-      else if(!gf && m_cfg.enableLotGuard)
+      else if(!gf && m_cfg.enableLotGuard && !InAtlBasket(snap.symbol, snap.type))
         {
          double maxLots = DpMaxLots(snap.symbol, money, m_cfg.balancePer001, m_cfg.lotUnit);
          if(snap.volume > maxLots + DP_VOLUME_EPS)
@@ -671,7 +700,8 @@ void CDomEngine::EvaluatePositions(void)
         }
 
       if(reason == DP_REASON_NONE && !gf && m_cfg.blockLosingHours &&
-         m_time.IsLosingEntry(snap.timeOpen))
+         m_time.IsLosingEntry(snap.timeOpen) &&
+         !InAtlBasket(snap.symbol, snap.type))
         {
          reason = DP_REASON_LOSING_HOUR;
          detail = "opened " + DpHourLabel(DpHourOf(snap.timeOpen, m_cfg)) + ":00";
@@ -689,8 +719,10 @@ void CDomEngine::EvaluatePositions(void)
            }
         }
 
-      // Money guard — only if a harder reason did not already win.
-      if(reason == DP_REASON_NONE && m_cfg.enableMoneyGuard)
+      bool inGrid = InAtlBasket(snap.symbol, snap.type);
+
+      // Money guard — skip individual TP/SL on an active add-to-losers basket.
+      if(reason == DP_REASON_NONE && m_cfg.enableMoneyGuard && !inGrid)
         {
          ENUM_DP_ZONE zone = ZoneOf(snap.profitNet, softMoney, hardMoney, tpMoney,
                                     m_st[si].profitLocked, lockFloor);
@@ -735,7 +767,7 @@ void CDomEngine::EvaluatePositions(void)
       if(reason != DP_REASON_NONE)
          Enqueue(snap.ticket, false, closeVol, reason, detail);
 
-      ApplyMoneyAndStops(i, reason != DP_REASON_NONE);
+      ApplyMoneyAndStops(i, reason != DP_REASON_NONE || inGrid);
      }
   }
 
@@ -983,6 +1015,7 @@ void CDomEngine::BuildView(void)
    g.dailyFloorArmLevel = m_dailyFloorArmLevel;
    g.dailyFloorArmed    = m_dailyFloorArmed;
    g.dailyFloorHit      = m_dailyFloorSticky;
+   AtlFillView(g);
    g.dryRun          = m_cfg.dryRun;
    g.armed           = m_armed;
    g.ownerConflict   = m_ownerConflict;
@@ -1037,6 +1070,10 @@ void CDomEngine::BuildView(void)
       m_vm.headline = "Daily loss cap hit — flattening / blocking";
    else if(m_dailyHitSticky)
       m_vm.headline = "Daily goal hit — new trades blocked";
+   else if(g.atlActive)
+      m_vm.headline = "ATL " + IntegerToString(g.atlLegs) + "  "
+                      + g.atlStatus + "  pnl " + DoubleToString(g.atlBasketPnl, 2)
+                      + " / " + DoubleToString(g.atlBeTarget, 2);
    else if(g.timeBlocking && g.timeNowLosing)
       m_vm.headline = "LOSING HOUR — entries will be closed";
    else if(m_posN > 0)
@@ -1077,6 +1114,7 @@ void CDomEngine::Work(void)
 
    SnapshotPositions();
    SnapshotPendings();
+   RebuildAtlBaskets();
 
    if(m_armed)
      {
@@ -1085,6 +1123,7 @@ void CDomEngine::Work(void)
          EnqueueAccountFlatten(DP_REASON_DAILY_FLOOR, DpFloorDetail(m_dailyFloorLevel));
       EvaluatePendings();
       EvaluatePositions();
+      RunAddToLosers();
       PruneState();
       PruneDead();
       ProcessQueue();
@@ -1186,6 +1225,15 @@ bool CDomEngine::Init(const SDpConfig &cfg)
       m_cfg.dailyFloorArmPct = 0.0;
    if(m_cfg.dailyFloorArmPct > 100.0)
       m_cfg.dailyFloorArmPct = 100.0;
+   if(m_cfg.atlMaxTrades < 2)
+      m_cfg.atlMaxTrades = 2;
+   if(m_cfg.atlMaxTrades > 20)
+      m_cfg.atlMaxTrades = 20;
+   if(m_cfg.atlBePlusPct < 0.0)
+      m_cfg.atlBePlusPct = 0.0;
+   if(m_cfg.atlLot < 0.0)
+      m_cfg.atlLot = 0.0;
+
    if(m_cfg.enableDailyFloor &&
       m_cfg.dailyFloorArmPct <= m_cfg.dailyFloorBufferPct)
      {
@@ -1269,5 +1317,7 @@ void CDomEngine::OnChartEvent(const int id)
    if(id == CHARTEVENT_CHART_CHANGE)
       Render(true);
   }
+
+#include "AddToLosers.mqh"
 
 #endif // DOMPANION_ENGINE_MQH

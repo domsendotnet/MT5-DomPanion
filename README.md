@@ -79,11 +79,14 @@ MT5 → Inputs. Nine groups. Read the left column; the right column is the value
 | **6 Hours** | Hour clock. Kill bad-hour trades (leave off at first). Bad hours / good hours |
 | **7 Today** | Win goal. Max loss (`0` = off) |
 | **8 Start money** | I started with. Wait until up %. Close if only up % |
-| **9 Extra** | Leave it |
+| **9 Add to losers** | After you add a 2nd trade the same way, it keeps adding at 2x, 3x, 4x that gap. Closes all at break-even + extra profit % of balance. Max trades. Lot per add (`0` = same as your 2nd). |
+| **10 Extra** | Leave it |
 
 Example for start money `600`: wait until up `5` (630), then close if only up `3` (618). Wait % must be bigger than close %.
 
-## Live (v1.14)
+**Add to losers:** You open a trade, it goes against you, you add a second in the same direction. DomPanion measures that gap. At 2×, 3×, 4×… of the gap (from the first price, still against you) it opens the next one. Same lot as your 2nd add unless you set **Lot per add**. When the **combined** profit of those trades is at least **Extra profit %** of account balance, it closes the lot. Per-trade TP/SL is off on that basket so one leg cannot take profit while the rest die. **Only 1 trade** still kills a 2nd trade in the *other* direction. Daily floor / max loss still flatten everything. Max trades includes your two manual ones. Off by default. High risk. Demo first.
+
+## Live (v1.20)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 
@@ -91,6 +94,7 @@ This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, co
 2. **Hours → Kill bad-hour trades** leave off until the clock looks right.
 3. Lots, profit, and only-1-trade are already on.
 4. **Start money**: set **I started with** to today’s real start. Wait until up % must be bigger than close if only up %.
+5. **Add to losers** is off. Turn it on only if you understand the grid. **Only 1 trade** can stay on; same-direction adds are allowed, extras the other way are not.
 
 ## License
 

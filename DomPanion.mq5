@@ -11,8 +11,8 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Dominik Fischer"
 #property link        "https://github.com/domsendotnet/MT5-DomPanion"
-#property version     "1.14"
-#property description "DomPanion — session clock, lot cap, money TP/SL with breathing room, scale-in block, daily start floor."
+#property version     "1.20"
+#property description "DomPanion — clock, lot cap, money TP/SL, one-trade, start floor, add-to-losers."
 #property description "Does not open trades. Attach to the chart you trade."
 
 #include "Include/Types.mqh"
@@ -64,7 +64,13 @@ input double            InpDailyStartBalance   = 600.0;  // I started with
 input double            InpDailyFloorArmPct    = 5.0;    // Wait until up %
 input double            InpDailyFloorBufferPct = 3.0;    // Close if only up %
 
-input group "9  Extra"
+input group "9  Add to losers"
+input bool              InpEnableAtl           = false;  // Add to losers
+input double            InpAtlBePlusPct        = 0.5;    // Extra profit %
+input int               InpAtlMaxTrades        = 6;      // Max trades
+input double            InpAtlLot              = 0.0;    // Lot per add (0=2nd)
+
+input group "10 Extra"
 input ENUM_DP_SCOPE     InpManageScope         = DP_SCOPE_CHART_SYMBOL; // Watch
 input ENUM_DP_SCOPE     InpOneTradeScope       = DP_SCOPE_CHART_SYMBOL; // One-trade on
 input long              InpMagicFilter         = -1;     // Which trades (-1=all  0=manual)
@@ -156,6 +162,11 @@ void DpFillConfig(SDpConfig &cfg)
    cfg.dailyStartBalance  = InpDailyStartBalance;
    cfg.dailyFloorBufferPct= InpDailyFloorBufferPct;
    cfg.dailyFloorArmPct   = InpDailyFloorArmPct;
+
+   cfg.enableAtl          = InpEnableAtl;
+   cfg.atlBePlusPct       = InpAtlBePlusPct;
+   cfg.atlMaxTrades       = InpAtlMaxTrades;
+   cfg.atlLot             = InpAtlLot;
 
    cfg.alertOnClose       = InpAlertOnClose;
    cfg.notifyOnClose      = InpNotifyOnClose;

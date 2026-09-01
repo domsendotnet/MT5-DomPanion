@@ -294,9 +294,48 @@ bool DpManageSymbol(const string symbol, const SDpConfig &cfg)
 
 bool DpManageMagic(const long magic, const SDpConfig &cfg)
   {
+   if(magic == DP_ATL_MAGIC)
+      return true;
    if(cfg.magicFilter < 0)
       return true;
    return (magic == cfg.magicFilter);
+  }
+
+double DpNormPrice(const string symbol, double price)
+  {
+   double tick = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(digits < 0)
+      digits = 5;
+   if(tick > 0.0)
+      price = MathRound(price / tick) * tick;
+   return NormalizeDouble(price, digits);
+  }
+
+bool DpPriceNear(const string symbol, const double a, const double b, const double step)
+  {
+   double tick = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   if(tick <= 0.0)
+      tick = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tol = tick * 3.0;
+   if(step > 0.0)
+      tol = MathMax(tol, step * 0.30);
+   return (MathAbs(a - b) <= tol);
+  }
+
+ENUM_POSITION_TYPE DpPosTypeFromOrder(const ENUM_ORDER_TYPE type)
+  {
+   if(type == ORDER_TYPE_SELL || type == ORDER_TYPE_SELL_LIMIT ||
+      type == ORDER_TYPE_SELL_STOP || type == ORDER_TYPE_SELL_STOP_LIMIT)
+      return POSITION_TYPE_SELL;
+   return POSITION_TYPE_BUY;
+  }
+
+bool DpIsAtlPending(const SPendingSnap &p)
+  {
+   if(p.magic == DP_ATL_MAGIC)
+      return true;
+   return (StringFind(p.comment, DP_ATL_COMMENT) == 0);
   }
 
 //+------------------------------------------------------------------+
