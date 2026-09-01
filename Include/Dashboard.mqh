@@ -80,6 +80,8 @@ private:
    void              DrawPosBar(const SPosView &p, const int x, const int y,
                                 const int w, const int h);
    void              DrawGuards(const SViewModel &vm, const int x0, const int x1);
+   void              DrawStatCell(const int x, const int y, const int w, const int h,
+                                  const SHourStat &hs, const string lab, const bool now);
    void              DrawClock(const SViewModel &vm, const int x0, const int x1);
    void              DrawActions(const SViewModel &vm, const int x0, const int x1);
    bool              Room(const int need) const;
@@ -724,68 +726,84 @@ void CDashboard::DrawGuards(const SViewModel &vm, const int x0, const int x1)
    m_curY += Px(6);
   }
 
+void CDashboard::DrawStatCell(const int x, const int y, const int w, const int h,
+                              const SHourStat &hs, const string lab, const bool now)
+  {
+   color cell = HeatColor(hs);
+   FillRound(x, y, w, h, Px(3), PackColor(cell, (hs.trades > 0 ? 200 : 120)));
+   if(now)
+      StrokeRound(x, y, w, h, Px(3), PackColor(m_theme.amber, 255));
+   else if(hs.losing)
+      StrokeRound(x, y, w, h, Px(3), PackColor(m_theme.red, 180));
+   Font(m_fsSm, true);
+   color fg = (hs.losing || (hs.sampleOk && hs.winRate >= 60.0)
+               ? C'255,255,255' : m_theme.text);
+   if(m_cfg.theme == DP_THEME_LIGHT && !hs.losing && hs.winRate < 60.0)
+      fg = m_theme.text;
+   int tw = TextW(lab);
+   Text(x + (w - tw) / 2, y + Px(4), lab, PackColor(fg));
+  }
+
 void CDashboard::DrawClock(const SViewModel &vm, const int x0, const int x1)
   {
-   int cols = 6;
-   int rows = 4;
    int gap  = Px(3);
    int inner = x1 - x0;
-   int cw = (inner - gap * (cols - 1)) / cols;
-   int ch = Px(22);
-   int need = m_row + rows * (ch + gap) + m_row * 3;
+   int dayH = Px(22);
+   int hourCols = 6;
+   int hourRows = 4;
+   int hourW = (inner - gap * (hourCols - 1)) / hourCols;
+   int hourH = Px(22);
+   int dayW = (inner - gap * 6) / 7;
+   int need = m_row + dayH + gap + hourRows * (hourH + gap) + m_row * 2;
    if(!Room(need))
       return;
 
-   string clockTitle = "CLOCK  entry-hour   "
-                       + IntegerToString(vm.time.days) + "d   n="
+   string clockTitle = "STATS  " + IntegerToString(vm.time.days) + "d   n="
                        + IntegerToString(vm.time.closedTrades);
    SectionTitle(clockTitle, x0);
 
-   int hour = 0;
-   for(int r = 0; r < rows; r++)
+   int dowOrder[7];
+   dowOrder[0] = 1;
+   dowOrder[1] = 2;
+   dowOrder[2] = 3;
+   dowOrder[3] = 4;
+   dowOrder[4] = 5;
+   dowOrder[5] = 6;
+   dowOrder[6] = 0;
+   int x = x0;
+   for(int i = 0; i < 7; i++)
      {
-      int x = x0;
-      for(int c = 0; c < cols; c++)
+      int d = dowOrder[i];
+      DrawStatCell(x, m_curY, dayW, dayH, vm.time.weekday[d], DpDowShort(d),
+                   (d == vm.time.currentDow));
+      x += dayW + gap;
+     }
+   m_curY += dayH + gap;
+
+   int hour = 0;
+   for(int r = 0; r < hourRows; r++)
+     {
+      x = x0;
+      for(int c = 0; c < hourCols; c++)
         {
-         SHourStat hs = vm.time.hour[hour];
-         color cell = HeatColor(hs);
-         FillRound(x, m_curY, cw, ch, Px(3), PackColor(cell, (hs.trades > 0 ? 200 : 120)));
-
-         if(hour == vm.time.currentHour)
-            StrokeRound(x, m_curY, cw, ch, Px(3), PackColor(m_theme.amber, 255));
-         else if(hs.losing)
-            StrokeRound(x, m_curY, cw, ch, Px(3), PackColor(m_theme.red, 180));
-
-         Font(m_fsSm, true);
-         string lab = DpHourLabel(hour);
-         color fg = (hs.losing || (hs.sampleOk && hs.winRate >= 60.0)
-                     ? C'255,255,255' : m_theme.text);
-         if(m_cfg.theme == DP_THEME_LIGHT && !hs.losing && hs.winRate < 60.0)
-            fg = m_theme.text;
-         int tw = TextW(lab);
-         Text(x + (cw - tw) / 2, m_curY + Px(4), lab, PackColor(fg));
-
-         x += cw + gap;
+         DrawStatCell(x, m_curY, hourW, hourH, vm.time.hour[hour], DpHourLabel(hour),
+                      (hour == vm.time.currentHour));
+         x += hourW + gap;
          hour++;
         }
-      m_curY += ch + gap;
+      m_curY += hourH + gap;
      }
 
-   Font(m_fsSm, false);
+   Font(m_fsSm, true);
    if(Room(m_row))
      {
-      Text(x0, m_curY, "Best   " + vm.time.bestText, PackColor(m_theme.green));
+      Text(x0, m_curY, vm.time.playText, PackColor(m_theme.green));
       m_curY += m_row - Px(1);
      }
    if(Room(m_row))
      {
-      Text(x0, m_curY, "Worst  " + vm.time.worstText, PackColor(m_theme.red));
+      Text(x0, m_curY, vm.time.skipText, PackColor(m_theme.red));
       m_curY += m_row - Px(1);
-     }
-   if(Room(m_row))
-     {
-      Text(x0, m_curY, "Losing " + vm.time.losingList, PackColor(m_theme.muted));
-      m_curY += m_row;
      }
    m_curY += Px(4);
   }
@@ -866,7 +884,7 @@ void CDashboard::Render(const SViewModel &vm)
                + m_row * 9          // guards
                + (vm.actionCount > 0 ? m_row * 4 : 0)
                + Px(12);
-   int clockH = m_row + 4 * (Px(22) + Px(3)) + m_row * 3 + Px(8);
+   int clockH = m_row + Px(22) + Px(3) + 4 * (Px(22) + Px(3)) + m_row * 2 + Px(8);
    int maxH = MathMax(Px(160), ch - Px(m_cfg.offsetY) * 2 - Px(m_cfg.bottomClearance));
    int wantH = bodyH;
    if(bodyH + clockH <= maxH)

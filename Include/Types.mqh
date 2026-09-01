@@ -13,6 +13,7 @@
 #define DP_MAX_ACTIONS           8
 #define DP_MAX_CLOSE_QUEUE       64
 #define DP_HOUR_COUNT            24
+#define DP_DOW_COUNT             7
 #define DP_GV_OWNER_PREFIX       "DomPanion.owner."
 #define DP_OBJ_CANVAS            "DomPanion.canvas"
 #define DP_TIMER_MS              250
@@ -186,13 +187,21 @@ struct STimeReport
    double            winRate;
    double            net;
    int               currentHour;
+   int               currentDow;            // 0=Sun .. 6=Sat
    int               bestHour;              // -1 if none
    int               worstHour;
+   int               bestDay;
+   int               worstDay;
    SHourStat         hour[DP_HOUR_COUNT];
+   SHourStat         weekday[DP_DOW_COUNT];
    bool              currentHourLosing;
    string            losingList;
    string            bestText;
    string            worstText;
+   string            bestDayText;
+   string            worstDayText;
+   string            playText;
+   string            skipText;
   };
 
 //+------------------------------------------------------------------+

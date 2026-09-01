@@ -117,6 +117,8 @@ bool CTimeAnalyzer::Rebuild(const bool force)
         {
          for(int h = 0; h < DP_HOUR_COUNT; h++)
             ResetHour(m_report.hour[h]);
+         for(int d = 0; d < DP_DOW_COUNT; d++)
+            ResetHour(m_report.weekday[d]);
          m_report.closedTrades = 0;
          m_report.wins = 0;
          m_report.losses = 0;
@@ -125,6 +127,7 @@ bool CTimeAnalyzer::Rebuild(const bool force)
          m_lastBuild = 0;
         }
       m_report.currentHour = DpHourOf(TimeCurrent(), m_cfg);
+      m_report.currentDow  = DpDowOf(TimeCurrent(), m_cfg);
       Classify();
       Summarize();
       m_report.ready = true;
@@ -138,6 +141,7 @@ bool CTimeAnalyzer::Rebuild(const bool force)
    if(!force && m_lastBuild > 0 && (now - m_lastBuild) < 30)
      {
       m_report.currentHour = DpHourOf(now, m_cfg);
+      m_report.currentDow  = DpDowOf(now, m_cfg);
       m_report.currentHourLosing = (m_report.currentHour >= 0 && m_report.currentHour < 24
                                     && m_report.hour[m_report.currentHour].losing);
       return true;
@@ -157,8 +161,11 @@ bool CTimeAnalyzer::Rebuild(const bool force)
    m_report.days     = days;
    m_report.builtAt  = now;
    m_report.currentHour = DpHourOf(now, m_cfg);
+   m_report.currentDow  = DpDowOf(now, m_cfg);
    for(int h = 0; h < DP_HOUR_COUNT; h++)
       ResetHour(m_report.hour[h]);
+   for(int d = 0; d < DP_DOW_COUNT; d++)
+      ResetHour(m_report.weekday[d]);
 
    if(!HistorySelect(selectFrom, now))
      {
@@ -268,6 +275,19 @@ bool CTimeAnalyzer::Rebuild(const bool force)
          hstat.losses++;
       m_report.hour[hour] = hstat;
 
+      int dow = DpDowOf(acc[i].tOpen, m_cfg);
+      if(dow >= 0 && dow < DP_DOW_COUNT)
+        {
+         SHourStat dstat = m_report.weekday[dow];
+         dstat.trades++;
+         dstat.net += acc[i].pnl;
+         if(acc[i].pnl > DP_MONEY_EPS)
+            dstat.wins++;
+         else
+            dstat.losses++;
+         m_report.weekday[dow] = dstat;
+        }
+
       m_report.closedTrades++;
       m_report.net += acc[i].pnl;
       if(acc[i].pnl > DP_MONEY_EPS)
@@ -276,6 +296,7 @@ bool CTimeAnalyzer::Rebuild(const bool force)
          m_report.losses++;
      }
 
+   int dayMin = MathMax(3, m_cfg.minTradesPerHour);
    for(int h = 0; h < DP_HOUR_COUNT; h++)
      {
       SHourStat hs = m_report.hour[h];
@@ -283,6 +304,14 @@ bool CTimeAnalyzer::Rebuild(const bool force)
          hs.winRate = 100.0 * (double)hs.wins / (double)hs.trades;
       hs.sampleOk = (hs.trades >= m_cfg.minTradesPerHour);
       m_report.hour[h] = hs;
+     }
+   for(int d = 0; d < DP_DOW_COUNT; d++)
+     {
+      SHourStat ds = m_report.weekday[d];
+      if(ds.trades > 0)
+         ds.winRate = 100.0 * (double)ds.wins / (double)ds.trades;
+      ds.sampleOk = (ds.trades >= dayMin);
+      m_report.weekday[d] = ds;
      }
 
    if(m_report.closedTrades > 0)
@@ -317,6 +346,21 @@ void CTimeAnalyzer::Classify(void)
          hs.losing = false;
 
       m_report.hour[h] = hs;
+     }
+
+   for(int d = 0; d < DP_DOW_COUNT; d++)
+     {
+      SHourStat ds = m_report.weekday[d];
+      ds.autoLosing = false;
+      ds.losing     = false;
+      if(m_cfg.enableTimeAnalysis && ds.sampleOk)
+        {
+         bool wrBad = (ds.winRate < m_cfg.losingWinRatePct);
+         bool netBad = (m_cfg.loseOnNegativeNet && ds.net < -DP_MONEY_EPS);
+         ds.autoLosing = (wrBad || netBad);
+         ds.losing     = ds.autoLosing;
+        }
+      m_report.weekday[d] = ds;
      }
   }
 
@@ -374,6 +418,73 @@ void CTimeAnalyzer::Summarize(void)
      }
    else
       m_report.worstText = "n/a";
+
+   m_report.bestDay  = -1;
+   m_report.worstDay = -1;
+   bestScore  = -1.0e100;
+   worstScore =  1.0e100;
+   for(int d = 0; d < DP_DOW_COUNT; d++)
+     {
+      if(m_report.weekday[d].trades <= 0)
+         continue;
+      double score = m_report.weekday[d].net;
+      if(score > bestScore)
+        {
+         bestScore = score;
+         m_report.bestDay = d;
+        }
+      if(score < worstScore)
+        {
+         worstScore = score;
+         m_report.worstDay = d;
+        }
+     }
+
+   if(m_report.bestDay >= 0)
+     {
+      SHourStat b = m_report.weekday[m_report.bestDay];
+      m_report.bestDayText = DpDowName(m_report.bestDay) + "  "
+                             + DoubleToString(b.winRate, 0) + "%  "
+                             + DoubleToString(b.net, 2);
+     }
+   else
+      m_report.bestDayText = "n/a";
+
+   if(m_report.worstDay >= 0)
+     {
+      SHourStat w = m_report.weekday[m_report.worstDay];
+      m_report.worstDayText = DpDowName(m_report.worstDay) + "  "
+                              + DoubleToString(w.winRate, 0) + "%  "
+                              + DoubleToString(w.net, 2);
+     }
+   else
+      m_report.worstDayText = "n/a";
+
+   if(m_report.bestDay >= 0 || m_report.bestHour >= 0)
+     {
+      m_report.playText = "Play ";
+      if(m_report.bestDay >= 0)
+         m_report.playText += " " + DpDowName(m_report.bestDay) + " "
+                              + DoubleToString(m_report.weekday[m_report.bestDay].net, 0);
+      if(m_report.bestHour >= 0)
+         m_report.playText += "   " + DpHourLabel(m_report.bestHour) + ":00 "
+                              + DoubleToString(m_report.hour[m_report.bestHour].net, 0);
+     }
+   else
+      m_report.playText = "Play  n/a";
+
+   if(m_report.worstDay >= 0 || m_report.worstHour >= 0)
+     {
+      m_report.skipText = "Skip ";
+      if(m_report.worstDay >= 0)
+         m_report.skipText += " " + DpDowName(m_report.worstDay) + " "
+                              + DoubleToString(m_report.weekday[m_report.worstDay].net, 0);
+      if(m_report.worstHour >= 0)
+         m_report.skipText += "   " + DpHourLabel(m_report.worstHour) + ":00 "
+                              + DoubleToString(m_report.hour[m_report.worstHour].net, 0);
+     }
+   else
+      m_report.skipText = "Skip  n/a";
   }
 
 bool CTimeAnalyzer::IsLosingHour(const int hour) const

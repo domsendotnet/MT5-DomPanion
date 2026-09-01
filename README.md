@@ -63,7 +63,9 @@ If the terminal dies, optional **broker SL at the hard kill** and **broker TP at
 
 On 0.10 lots that is +20 / −20 / −60.
 
-Losing hours are classified from **entry time**, not the current clock. Block is off by default so you can read the heatmap first.
+STATS on the panel: **Mo–Su** (best days) and **00–23** (best hours). Green = you made money, red = you lost. **Play** / **Skip** is the short version. Hours are by **entry time**. Block is off by default until you trust it.
+
+As soon as a **second** same-way trade is open, SL and TP on those trades are removed. One leg taking profit while the other is a loser does not make sense. The basket then exits together (add-to-losers BE, or your money TP if you only have one ticket).
 
 ## Settings
 
@@ -76,7 +78,7 @@ MT5 → Inputs. Nine groups. Read the left column; the right column is the value
 | **3 Lots** | Money for 0.01 lot |
 | **4 Profit** | Win per 0.01, room per 0.01, close after this many rooms |
 | **5 Trades** | Only 1 trade |
-| **6 Hours** | Hour clock. Kill bad-hour trades (leave off at first). Bad hours / good hours |
+| **6 Hours** | Show stats. Kill bad-hour trades (leave off at first). Bad hours / good hours |
 | **7 Today** | Win goal. Max loss (`0` = off) |
 | **8 Start money** | I started with. Wait until up %. Close if only up % |
 | **9 Add to losers** | After you add a 2nd trade the same way, it keeps adding at 2x, 3x, 4x that gap. Closes all at break-even + extra profit % of balance. Max trades. Lot per add (`0` = same as your 2nd). |
@@ -94,11 +96,11 @@ How the rules stack (highest first):
 4. Bad hours — no new trades and no new grid adds; an already-running grid is left for BE or the floor.
 5. Lot cap — a **single** ticket bigger than max is always closed; the grid will not add if total size would exceed max.
 6. Only 1 trade — still kills the other direction / other symbols. Same-way adds are allowed while add-to-losers is on.
-7. Money TP/SL — normal on a single trade. Off on an active grid (the basket exit is the TP).
+7. Money TP/SL — on a **single** trade. The moment a second same-way trade exists, SL/TP are cleared and per-trade exits stay off (the basket exits together).
 
 Off by default. High risk. Demo first.
 
-## Live (v1.21)
+## Live (v1.22)
 
 This is the current public cut. Copy the folder to `MQL5/Experts/DomPanion/`, compile `DomPanion.mq5`, attach, **Algo Trading on**. Test on demo first. Live use is your own risk; see the disclaimer above.
 

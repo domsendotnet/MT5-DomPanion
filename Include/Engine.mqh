@@ -82,6 +82,9 @@ private:
    int               KeeperIndex(void) const;
    bool              InOneTradeScope(const string symbol) const;
    bool              Grandfathered(const datetime timeOpen) const;
+   int               CountSameDir(const string symbol, const ENUM_POSITION_TYPE type) const;
+   bool              SameDirStack(const string symbol, const ENUM_POSITION_TYPE type) const;
+   void              StripStackedStops(void);
    void              RefreshDaily(void);
    void              EnqueueAccountFlatten(const ENUM_DP_REASON reason, const string detail);
    void              EvaluatePendings(void);
@@ -365,6 +368,44 @@ bool CDomEngine::Grandfathered(const datetime timeOpen) const
    if(m_cfg.enforceOnStart)
       return false;
    return (timeOpen > 0 && timeOpen <= m_initTime);
+  }
+
+int CDomEngine::CountSameDir(const string symbol, const ENUM_POSITION_TYPE type) const
+  {
+   int n = 0;
+   for(int i = 0; i < m_posN; i++)
+     {
+      if(m_pos[i].symbol == symbol && m_pos[i].type == type)
+         n++;
+     }
+   return n;
+  }
+
+bool CDomEngine::SameDirStack(const string symbol, const ENUM_POSITION_TYPE type) const
+  {
+   return (CountSameDir(symbol, type) >= 2);
+  }
+
+void CDomEngine::StripStackedStops(void)
+  {
+   if(m_cfg.dryRun)
+      return;
+   for(int i = 0; i < m_posN; i++)
+     {
+      if(!SameDirStack(m_pos[i].symbol, m_pos[i].type))
+         continue;
+      if(m_pos[i].sl == 0.0 && m_pos[i].tp == 0.0)
+         continue;
+      DpPrepareTrade(m_trade, m_pos[i].symbol, m_cfg.slippagePoints);
+      if(m_trade.PositionModify(m_pos[i].ticket, 0.0, 0.0))
+        {
+         m_pos[i].sl = 0.0;
+         m_pos[i].tp = 0.0;
+         DpLog(1, m_cfg.logLevel,
+               "cleared SL/TP on #" + IntegerToString((long)m_pos[i].ticket)
+               + " (2nd trade open)");
+        }
+     }
   }
 
 int CDomEngine::KeeperIndex(void) const
@@ -660,7 +701,8 @@ void CDomEngine::EvaluatePositions(void)
          continue;
 
       bool gf = Grandfathered(snap.timeOpen);
-      bool inGrid = InAtlBasket(snap.symbol, snap.type);
+      bool inStack = SameDirStack(snap.symbol, snap.type);
+      bool inGrid = InAtlBasket(snap.symbol, snap.type) || inStack;
       double tpMoney = 0.0, softMoney = 0.0, hardMoney = 0.0;
       DpMoneyBand(snap.volume, m_cfg, tpMoney, softMoney, hardMoney);
 
@@ -776,7 +818,7 @@ void CDomEngine::EvaluatePositions(void)
       if(reason != DP_REASON_NONE)
          Enqueue(snap.ticket, false, closeVol, reason, detail);
 
-      ApplyMoneyAndStops(i, reason != DP_REASON_NONE || inGrid);
+      ApplyMoneyAndStops(i, reason != DP_REASON_NONE || inStack);
      }
   }
 
@@ -1125,6 +1167,7 @@ void CDomEngine::Work(void)
    SnapshotPositions();
    SnapshotPendings();
    RebuildAtlBaskets();
+   StripStackedStops();
 
    if(m_armed)
      {

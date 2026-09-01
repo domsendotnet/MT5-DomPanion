@@ -82,6 +82,44 @@ int DpHourOf(const datetime serverTime, const SDpConfig &cfg)
    return dt.hour;
   }
 
+int DpDowOf(const datetime serverTime, const SDpConfig &cfg)
+  {
+   datetime t = DpShiftTime(serverTime, cfg);
+   MqlDateTime dt;
+   TimeToStruct(t, dt);
+   return dt.day_of_week;
+  }
+
+string DpDowName(const int dow)
+  {
+   switch(dow)
+     {
+      case 0: return "Sun";
+      case 1: return "Mon";
+      case 2: return "Tue";
+      case 3: return "Wed";
+      case 4: return "Thu";
+      case 5: return "Fri";
+      case 6: return "Sat";
+      default: return "--";
+     }
+  }
+
+string DpDowShort(const int dow)
+  {
+   switch(dow)
+     {
+      case 0: return "Su";
+      case 1: return "Mo";
+      case 2: return "Tu";
+      case 3: return "We";
+      case 4: return "Th";
+      case 5: return "Fr";
+      case 6: return "Sa";
+      default: return "--";
+     }
+  }
+
 datetime DpDayStartServer(void)
   {
    MqlDateTime dt;
